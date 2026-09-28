@@ -2,8 +2,10 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -25,6 +27,11 @@ func (repo *UserRepository) Create(ctx context.Context, user *User) (*User, erro
 	err := row.Scan(&createdUser.ID, &createdUser.Email, &createdUser.Name, &createdUser.PasswordHash, &createdUser.CreatedAt, &createdUser.UpdatedAt)
 
 	if err != nil {
+		var pgError *pgconn.PgError
+
+		if errors.As(err, &pgError) && pgError.Code == "23505" {
+			return nil, ErrEmailAlreadyExists
+		}
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 	return createdUser, nil
