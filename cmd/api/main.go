@@ -17,6 +17,7 @@ import (
 
 	"qtp/internal/config"
 	"qtp/internal/database"
+	"qtp/internal/user"
 )
 
 func main() {
@@ -40,6 +41,10 @@ func run() error {
 	pool, err := database.Open(databaseContext, cfg.Database)
 	cancelDatabase()
 
+	userRepository := user.NewUserRepository(pool)
+	userService := user.NewUserService(userRepository)
+	userHandler := user.NewUserHandler(userService)
+
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}
@@ -56,6 +61,9 @@ func run() error {
 	)
 
 	router := http.NewServeMux()
+
+	//AUTH Routes
+	router.HandleFunc("POST /v1/auth/register", userHandler.Register)
 
 	router.HandleFunc("GET /health", healthHandler)
 	router.HandleFunc("GET /ready", readyHandler(pool))

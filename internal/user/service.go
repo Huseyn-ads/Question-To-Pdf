@@ -38,7 +38,7 @@ func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*U
 		return nil, ErrInvalidEmail
 	}
 
-	if parsedEmail.String() != request.Email && parsedEmail.Name == "" {
+	if parsedEmail.Address != request.Email && parsedEmail.Name != "" {
 		return nil, ErrInvalidEmail
 	}
 
