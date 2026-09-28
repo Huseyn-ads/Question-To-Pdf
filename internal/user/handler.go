@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"qtp/internal/httpx"
 )
 
 type UserHandler struct {
@@ -23,7 +24,7 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&req)
 
 	if err != nil {
-		http.Error(w, "Invalid JSON  body", http.StatusBadRequest)
+		httpx.WriteError(w, http.StatusBadRequest, "Invalid JSON body")
 		return
 	}
 
@@ -37,12 +38,12 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, ErrPasswordRequired),
 			errors.Is(err, ErrPasswordTooLong),
 			errors.Is(err, ErrPasswordTooShort):
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, ErrEmailAlreadyExists):
-			http.Error(w, ErrEmailAlreadyExists.Error(), http.StatusConflict)
+			httpx.WriteError(w, http.StatusConflict, ErrEmailAlreadyExists.Error())
 		default:
 			slog.Error("register user", "error", err)
-			http.Error(w, "Internal server errror", http.StatusInternalServerError)
+			httpx.WriteError(w, http.StatusInternalServerError, "Internal server errror")
 		}
 		return
 	}
@@ -54,8 +55,13 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: createdUser.CreatedAt,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(response)
+	if err := httpx.WriteJSON(
+		w,
+		http.StatusCreated,
+		response,
+	); err != nil {
+		slog.Error("write register response", "error", err)
+	}
 
+	httpx.WriteJSON(w, http.StatusCreated, response)
 }
