@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/mail"
 	"strings"
@@ -18,6 +19,35 @@ func NewUserService(ur *UserRepository) *UserService {
 	return &UserService{
 		repository: ur,
 	}
+}
+
+func (s *UserService) Authenticate(ctx context.Context, request LoginRequest) (*User, error) {
+	request.Email = strings.ToLower(strings.TrimSpace(request.Email))
+
+	if request.Email == "" || request.Password == "" {
+		return nil, ErrInvalidCredentials
+	}
+
+	foundUser, err := s.repository.FindByEmail(ctx, request.Email)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, fmt.Errorf("find user by email: %w", err)
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(foundUser.PasswordHash), []byte(request.Password))
+
+	if err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return nil, ErrInvalidCredentials
+		}
+
+		return nil, fmt.Errorf("compare password hash: %w", err)
+	}
+
+	return foundUser, nil
+
 }
 
 func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*User, error) {

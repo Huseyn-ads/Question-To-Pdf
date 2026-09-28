@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -36,4 +37,21 @@ func (repo *UserRepository) Create(ctx context.Context, user *User) (*User, erro
 	}
 	return createdUser, nil
 
+}
+
+func (repo *UserRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
+	foundUser := &User{}
+	const query = "SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = $1;"
+	row := repo.db.QueryRow(ctx, query, email)
+
+	err := row.Scan(&foundUser.ID, &foundUser.Email, &foundUser.Name, &foundUser.PasswordHash, &foundUser.CreatedAt, &foundUser.UpdatedAt)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+
+	return foundUser, nil
 }
