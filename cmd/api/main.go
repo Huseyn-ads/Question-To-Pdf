@@ -17,6 +17,7 @@ import (
 
 	"qtp/internal/config"
 	"qtp/internal/database"
+	"qtp/internal/session"
 	"qtp/internal/user"
 )
 
@@ -42,7 +43,9 @@ func run() error {
 	cancelDatabase()
 
 	userRepository := user.NewUserRepository(pool)
-	userService := user.NewUserService(userRepository)
+	sessionRepository := session.NewSessionRepository(pool)
+
+	userService := user.NewUserService(userRepository, sessionRepository)
 	userHandler := user.NewUserHandler(userService)
 
 	if err != nil {
@@ -63,6 +66,7 @@ func run() error {
 	router := http.NewServeMux()
 
 	//AUTH Routes
+	router.HandleFunc("POST /v1/auth/login", userHandler.Login)
 	router.HandleFunc("POST /v1/auth/register", userHandler.Register)
 
 	router.HandleFunc("GET /health", healthHandler)

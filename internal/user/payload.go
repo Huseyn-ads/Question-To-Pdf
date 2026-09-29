@@ -7,6 +7,12 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+type LoginResult struct {
+	User      *User
+	Token     string
+	ExpiresAt time.Time
+}
+
 type RegisterRequest struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`

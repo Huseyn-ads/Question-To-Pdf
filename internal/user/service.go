@@ -5,19 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"qtp/internal/session"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 type UserService struct {
-	repository *UserRepository
+	repository        *UserRepository
+	sessionRepository *session.SessionRepository
 }
 
-func NewUserService(ur *UserRepository) *UserService {
+func NewUserService(ur *UserRepository, sr *session.SessionRepository) *UserService {
 	return &UserService{
-		repository: ur,
+		repository:        ur,
+		sessionRepository: sr,
 	}
 }
 
@@ -48,6 +52,43 @@ func (s *UserService) Authenticate(ctx context.Context, request LoginRequest) (*
 
 	return foundUser, nil
 
+}
+
+func (s *UserService) Login(ctx context.Context, request LoginRequest) (*LoginResult, error) {
+	newUser, err := s.Authenticate(ctx, request)
+
+	if err != nil {
+		if errors.Is(err, ErrInvalidCredentials) {
+			return nil, ErrInvalidCredentials
+		}
+
+		return nil, fmt.Errorf("authenticate user: %w", err)
+	}
+
+	token, hashedToken, err := session.GenerateToken()
+
+	if err != nil {
+		return nil, fmt.Errorf("token generate: %w", err)
+	}
+
+	const sessionDuration = 7 * 24 * time.Hour
+	newSession := session.Session{
+		UserID:    newUser.ID,
+		TokenHash: hashedToken,
+		ExpiresAt: time.Now().UTC().Add(sessionDuration),
+	}
+
+	createdSession, err := s.sessionRepository.Create(ctx, &newSession)
+
+	if err != nil {
+		return nil, fmt.Errorf("create session: %w", err)
+	}
+
+	return &LoginResult{
+		User:      newUser,
+		Token:     token,
+		ExpiresAt: createdSession.ExpiresAt,
+	}, nil
 }
 
 func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*User, error) {
