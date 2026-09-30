@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"qtp/internal/httpx"
+	"time"
 )
 
 type UserHandler struct {
@@ -41,7 +42,7 @@ func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "session",
+		Name:     sessionCookieName,
 		Value:    result.Token,
 		Path:     "/",
 		Expires:  result.ExpiresAt,
@@ -105,4 +106,105 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusCreated, response)
+}
+
+func (handler *UserHandler) Me(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	currentUser, ok := UserFromContext(r.Context())
+	if !ok {
+		if err := httpx.WriteError(
+			w,
+			http.StatusUnauthorized,
+			ErrUnauthorized.Error(),
+		); err != nil {
+			slog.Error(
+				"write unauthorized response",
+				"error",
+				err,
+			)
+		}
+
+		return
+	}
+
+	response := UserResponse{
+		ID:        currentUser.ID,
+		Email:     currentUser.Email,
+		Name:      currentUser.Name,
+		CreatedAt: currentUser.CreatedAt,
+	}
+
+	if err := httpx.WriteJSON(
+		w,
+		http.StatusOK,
+		response,
+	); err != nil {
+		slog.Error(
+			"write current user response",
+			"error",
+			err,
+		)
+	}
+}
+
+func (handler *UserHandler) Logout(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	cookie, err := r.Cookie(sessionCookieName)
+
+	if err == nil {
+		err = handler.service.Logout(
+			r.Context(),
+			cookie.Value,
+		)
+		if err != nil {
+			slog.Error("logout user", "error", err)
+
+			if writeErr := httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"internal server error",
+			); writeErr != nil {
+				slog.Error(
+					"write logout error response",
+					"error",
+					writeErr,
+				)
+			}
+
+			return
+		}
+	} else if !errors.Is(err, http.ErrNoCookie) {
+		slog.Error("read session cookie", "error", err)
+
+		if writeErr := httpx.WriteError(
+			w,
+			http.StatusInternalServerError,
+			"internal server error",
+		); writeErr != nil {
+			slog.Error(
+				"write cookie error response",
+				"error",
+				writeErr,
+			)
+		}
+
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(1, 0).UTC(),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
 }

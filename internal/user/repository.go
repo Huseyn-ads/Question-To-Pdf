@@ -50,8 +50,28 @@ func (repo *UserRepository) FindByEmail(ctx context.Context, email string) (*Use
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("find user: %w", err)
+		return nil, fmt.Errorf("find user by email: %w", err)
 	}
 
 	return foundUser, nil
+}
+
+func (repo *UserRepository) FindByID(ctx context.Context, id string) (*User, error) {
+	foundUser := &User{}
+	const query = "SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE id = $1;"
+	row := repo.db.QueryRow(ctx, query, id)
+
+	err := row.Scan(&foundUser.ID, &foundUser.Email, &foundUser.Name, &foundUser.PasswordHash, &foundUser.CreatedAt, &foundUser.UpdatedAt)
+
+	if err != nil {
+
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+
+		return nil, fmt.Errorf("find user by ID: %w", err)
+	}
+
+	return foundUser, nil
+
 }

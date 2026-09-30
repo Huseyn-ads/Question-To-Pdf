@@ -66,6 +66,8 @@ func run() error {
 	router := http.NewServeMux()
 
 	//AUTH Routes
+	router.HandleFunc("POST /v1/auth/logout", userHandler.Logout)
+	router.Handle("GET /v1/auth/me", userHandler.RequireAuth(http.HandlerFunc(userHandler.Me)))
 	router.HandleFunc("POST /v1/auth/login", userHandler.Login)
 	router.HandleFunc("POST /v1/auth/register", userHandler.Register)
 

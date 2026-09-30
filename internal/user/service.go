@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/mail"
 	"qtp/internal/session"
+
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -145,4 +146,49 @@ func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*U
 	}
 
 	return createdUser, nil
+}
+
+func (s *UserService) CurrentUser(ctx context.Context, token string) (*User, error) {
+	if token == "" {
+		return nil, ErrUnauthorized
+	}
+
+	newToken := session.HashToken(token)
+
+	foundSession, err := s.sessionRepository.FindActiveByTokenHash(ctx, newToken)
+
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			return nil, ErrUnauthorized
+		}
+		return nil, fmt.Errorf("current user: %w", err)
+	}
+
+	user, err := s.repository.FindByID(ctx, foundSession.UserID)
+
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return nil, ErrUnauthorized
+		}
+		return nil, fmt.Errorf("find current user: %w", err)
+	}
+
+	return user, nil
+
+}
+
+func (s *UserService) Logout(ctx context.Context, token string) error {
+	if token == "" {
+		return nil
+	}
+
+	tokenHash := session.HashToken(token)
+
+	err := s.sessionRepository.DeleteByTokenHash(ctx, tokenHash)
+
+	if err != nil {
+		return fmt.Errorf("logout user: %w", err)
+	}
+
+	return nil
 }
