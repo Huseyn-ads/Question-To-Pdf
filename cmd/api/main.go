@@ -17,6 +17,7 @@ import (
 
 	"qtp/internal/config"
 	"qtp/internal/database"
+	"qtp/internal/questionbank"
 	"qtp/internal/session"
 	"qtp/internal/user"
 )
@@ -42,6 +43,12 @@ func run() error {
 	pool, err := database.Open(databaseContext, cfg.Database)
 	cancelDatabase()
 
+	//QUESTION BANK
+	questionBankRepository := questionbank.NewQuestionBankRepository(pool)
+	questionBankService := questionbank.NewQuestionBankService(questionBankRepository)
+	questionBankHandler := questionbank.NewQuestionBankHandler(questionBankService)
+
+	// USER
 	userRepository := user.NewUserRepository(pool)
 	sessionRepository := session.NewSessionRepository(pool)
 
@@ -64,6 +71,12 @@ func run() error {
 	)
 
 	router := http.NewServeMux()
+
+	//Question Bank handler
+	//
+	router.Handle("GET /v1/question-banks", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.List)))
+	router.Handle("GET /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Find)))
+	router.Handle("POST /v1/question-banks", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Create)))
 
 	//AUTH Routes
 	router.HandleFunc("POST /v1/auth/logout", userHandler.Logout)
