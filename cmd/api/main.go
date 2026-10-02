@@ -77,6 +77,9 @@ func run() error {
 	router.Handle("GET /v1/question-banks", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.List)))
 	router.Handle("GET /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Find)))
 	router.Handle("POST /v1/question-banks", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Create)))
+	router.Handle(
+		"PATCH /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Patch)))
+	router.Handle("DELETE /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Delete)))
 
 	//AUTH Routes
 	router.HandleFunc("POST /v1/auth/logout", userHandler.Logout)

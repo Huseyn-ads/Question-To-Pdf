@@ -85,3 +85,36 @@ func (repo *QuestionBankRepository) Create(ctx context.Context, bank *QuestionBa
 
 	return createdBank, nil
 }
+
+func (repo *QuestionBankRepository) Update(ctx context.Context, title, description *string, bankID string, userID string) (*QuestionBank, error) {
+	updatedBank := &QuestionBank{}
+	const query = "UPDATE question_banks SET title = COALESCE($1, title), description = COALESCE($2, description), updated_at = NOW() WHERE id = $3 AND user_id = $4 RETURNING id, user_id, title, description, created_at, updated_at"
+	row := repo.db.QueryRow(ctx, query, title, description, bankID, userID)
+
+	err := row.Scan(&updatedBank.ID, &updatedBank.UserID, &updatedBank.Title, &updatedBank.Description, &updatedBank.CreatedAt, &updatedBank.UpdatedAt)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrQuestionBankNotFound
+		}
+		return nil, fmt.Errorf("update question bank: %w", err)
+	}
+
+	return updatedBank, nil
+}
+
+func (repo *QuestionBankRepository) Delete(ctx context.Context, bankID string, userID string) error {
+	const query = "DELETE FROM question_banks WHERE id = $1 AND user_id = $2"
+	result, err := repo.db.Exec(ctx, query, bankID, userID)
+
+	if err != nil {
+		return fmt.Errorf("delete question bank: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrQuestionBankNotFound
+	}
+
+	return nil
+
+}
