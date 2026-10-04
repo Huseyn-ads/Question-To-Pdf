@@ -70,6 +70,12 @@ func (handler *QuestionBankHandler) Find(w http.ResponseWriter, r *http.Request)
 				ErrQuestionBankNotFound.Error(),
 			)
 			return
+
+		}
+
+		if errors.Is(err, ErrInvalidQuestionBankID) {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
 		}
 
 		slog.Error("find question bank", "error", err)
@@ -162,7 +168,8 @@ func (handler *QuestionBankHandler) Patch(w http.ResponseWriter, r *http.Request
 				http.StatusNotFound,
 				ErrQuestionBankNotFound.Error(),
 			)
-
+		case errors.Is(err, ErrInvalidQuestionBankID):
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 		default:
 			slog.Error("update question bank", "error", err)
 			httpx.WriteError(
@@ -185,14 +192,13 @@ func (handler *QuestionBankHandler) Patch(w http.ResponseWriter, r *http.Request
 }
 
 func (handler *QuestionBankHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	bankID := r.PathValue("bankID")
 	currentUser, ok := user.UserFromContext(r.Context())
 
 	if !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-
-	bankID := r.PathValue("bankID")
 
 	err := handler.service.Delete(r.Context(), bankID, currentUser.ID)
 
@@ -203,6 +209,10 @@ func (handler *QuestionBankHandler) Delete(w http.ResponseWriter, r *http.Reques
 				http.StatusNotFound,
 				ErrQuestionBankNotFound.Error(),
 			)
+			return
+		}
+		if errors.Is(err, ErrInvalidQuestionBankID) {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		slog.Error("delete question bank", "error", err)

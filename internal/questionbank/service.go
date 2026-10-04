@@ -34,6 +34,9 @@ func (s *QuestionBankService) FindByID(
 	bankID string,
 	userID string,
 ) (*QuestionBank, error) {
+	if err := validateBankID(bankID); err != nil {
+		return nil, err
+	}
 	questionBank, err := s.repository.FindByID(ctx, bankID, userID)
 	if err != nil {
 		if errors.Is(err, ErrQuestionBankNotFound) {
@@ -75,6 +78,9 @@ func (s *QuestionBankService) Create(ctx context.Context, userID string, request
 }
 
 func (s *QuestionBankService) Update(ctx context.Context, userID string, bankID string, request UpdateRequest) (*QuestionBank, error) {
+	if err := validateBankID(bankID); err != nil {
+		return nil, err
+	}
 	if request.Title == nil && request.Description == nil {
 		return nil, ErrNoFieldsToUpdate
 	}
@@ -116,6 +122,9 @@ func (s *QuestionBankService) Update(ctx context.Context, userID string, bankID 
 }
 
 func (s *QuestionBankService) Delete(ctx context.Context, bankID, userID string) error {
+	if err := validateBankID(bankID); err != nil {
+		return err
+	}
 	err := s.repository.Delete(ctx, bankID, userID)
 	if err != nil {
 		if errors.Is(err, ErrQuestionBankNotFound) {
