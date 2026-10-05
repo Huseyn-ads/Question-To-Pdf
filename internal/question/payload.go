@@ -27,3 +27,8 @@ type OptionResponse struct {
 	Position  int    `json:"position"`
 	IsCorrect bool   `json:"is_correct"`
 }
+
+type UpdateRequest struct {
+	Text    string                `json:"text"`
+	Options []CreateOptionRequest `json:"options"`
+}

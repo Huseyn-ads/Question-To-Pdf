@@ -20,6 +20,24 @@ func NewQuestionService(repository *QuestionRepository) *QuestionService {
 	}
 }
 
+func (s *QuestionService) ListByBankID(ctx context.Context, userID string, bankID string) ([]Question, error) {
+	if _, err := uuid.Parse(bankID); err != nil {
+		return nil, questionbank.ErrInvalidQuestionBankID
+	}
+
+	questions, err := s.repository.ListByBankID(ctx, userID, bankID)
+
+	if err != nil {
+		if errors.Is(err, questionbank.ErrQuestionBankNotFound) {
+			return nil, questionbank.ErrQuestionBankNotFound
+		}
+		return nil, fmt.Errorf("list by bank id: %w", err)
+	}
+
+	return questions, nil
+
+}
+
 func (s *QuestionService) FindByID(ctx context.Context, userID string, bankID string, questionID string) (*Question, error) {
 	if _, err := uuid.Parse(bankID); err != nil {
 		return nil, questionbank.ErrInvalidQuestionBankID
@@ -42,36 +60,123 @@ func (s *QuestionService) FindByID(ctx context.Context, userID string, bankID st
 }
 
 func (s *QuestionService) Create(ctx context.Context, bankID string, userID string, request CreateRequest) (*Question, error) {
-	text := strings.TrimSpace(request.Text)
-	options := request.Options
+	text, options, err := prepareQuestionData(
+		request.Text,
+		request.Options,
+	)
+	if err != nil {
+		return nil, err
+	}
 
+	newQuestion := &Question{
+		QuestionBankID: bankID,
+		Text:           text,
+		Options:        options,
+	}
+
+	createdQuestion, err := s.repository.Create(
+		ctx,
+		userID,
+		newQuestion,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create question: %w", err)
+	}
+
+	return createdQuestion, nil
+}
+
+func (s *QuestionService) Update(ctx context.Context, userID string, bankID string, questionID string, request UpdateRequest) (*Question, error) {
 	if _, err := uuid.Parse(bankID); err != nil {
 		return nil, questionbank.ErrInvalidQuestionBankID
 	}
 
+	if _, err := uuid.Parse(questionID); err != nil {
+		return nil, ErrInvalidQuestionID
+	}
+
+	text, options, err := prepareQuestionData(
+		request.Text,
+		request.Options,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	newQuestion := &Question{
+		QuestionBankID: bankID,
+		Text:           text,
+		Options:        options,
+	}
+
+	updatedQuestion, err := s.repository.Update(ctx, userID, bankID, questionID, newQuestion)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"update question: %w",
+			err,
+		)
+	}
+
+	return updatedQuestion, nil
+}
+
+func (s *QuestionService) Delete(ctx context.Context, userID string, bankID string, questionID string) error {
+	if _, err := uuid.Parse(bankID); err != nil {
+		return questionbank.ErrInvalidQuestionBankID
+	}
+
+	if _, err := uuid.Parse(questionID); err != nil {
+		return ErrInvalidQuestionID
+	}
+
+	err := s.repository.Delete(ctx, userID, bankID, questionID)
+
+	if err != nil {
+		if errors.Is(err, ErrQuestionNotFound) {
+			return ErrQuestionNotFound
+		}
+		return fmt.Errorf("delete question: %w", err)
+	}
+
+	return nil
+
+}
+
+func prepareQuestionData(text string, options []CreateOptionRequest) (string, []AnswerOption, error) {
+	text = strings.TrimSpace(text)
+
 	if text == "" {
-		return nil, ErrTextRequired
+		return "", nil, ErrTextRequired
 	}
 
 	if len(options) < 2 {
-		return nil, ErrNotEnoughOptions
+		return "", nil, ErrNotEnoughOptions
 	}
 
+	preparedOptions := make(
+		[]AnswerOption,
+		0,
+		len(options),
+	)
+
+	seenOptions := make(
+		map[string]struct{},
+		len(options),
+	)
+
 	correctCount := 0
-	seenOptions := make(map[string]struct{}, len(options))
-	answerOptions := make([]AnswerOption, 0, len(options))
 
 	for index, option := range options {
 		optionText := strings.TrimSpace(option.Text)
 
 		if optionText == "" {
-			return nil, ErrOptionTextRequired
+			return "", nil, ErrOptionTextRequired
 		}
 
 		normalizedOption := strings.ToLower(optionText)
 
 		if _, exists := seenOptions[normalizedOption]; exists {
-			return nil, ErrDuplicateOptions
+			return "", nil, ErrDuplicateOptions
 		}
 
 		seenOptions[normalizedOption] = struct{}{}
@@ -80,27 +185,19 @@ func (s *QuestionService) Create(ctx context.Context, bankID string, userID stri
 			correctCount++
 		}
 
-		answerOptions = append(answerOptions, AnswerOption{
-			Text:      optionText,
-			Position:  index + 1,
-			IsCorrect: option.IsCorrect,
-		})
+		preparedOptions = append(
+			preparedOptions,
+			AnswerOption{
+				Text:      optionText,
+				Position:  index + 1,
+				IsCorrect: option.IsCorrect,
+			},
+		)
 	}
 
 	if correctCount != 1 {
-		return nil, ErrExactlyOneCorrectOption
-	}
-	question := Question{
-		QuestionBankID: bankID,
-		Text:           text,
-		Options:        answerOptions,
+		return "", nil, ErrExactlyOneCorrectOption
 	}
 
-	createdQuestion, err := s.repository.Create(ctx, userID, &question)
-	if err != nil {
-		return nil, fmt.Errorf("create question: %w", err)
-	}
-
-	return createdQuestion, nil
-
+	return text, preparedOptions, nil
 }

@@ -120,26 +120,16 @@ func (repo *QuestionRepository) ListByBankID(ctx context.Context, userID string,
 
 		isFirstQuestion := len(questions) == 0
 
-		if isFirstQuestion ||
-			questions[len(questions)-1].ID != currentQuestion.ID {
+		if isFirstQuestion || questions[len(questions)-1].ID != currentQuestion.ID {
 
-			currentQuestion.Options = make(
-				[]AnswerOption,
-				0,
-			)
+			currentQuestion.Options = make([]AnswerOption, 0)
 
-			questions = append(
-				questions,
-				currentQuestion,
-			)
+			questions = append(questions, currentQuestion)
 		}
 
 		lastQuestionIndex := len(questions) - 1
 
-		questions[lastQuestionIndex].Options = append(
-			questions[lastQuestionIndex].Options,
-			currentOption,
-		)
+		questions[lastQuestionIndex].Options = append(questions[lastQuestionIndex].Options, currentOption)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -343,4 +333,159 @@ func (repo *QuestionRepository) Create(ctx context.Context, userID string, quest
 	}
 
 	return createdQuestion, nil
+}
+
+func (repo *QuestionRepository) Update(ctx context.Context, userID string, bankID string, questionID string, question *Question) (*Question, error) {
+	updatedQuestion := &Question{
+		Options: make(
+			[]AnswerOption,
+			0,
+			len(question.Options),
+		),
+	}
+	tx, err := repo.db.Begin(ctx)
+
+	if err != nil {
+		return nil, fmt.Errorf(
+			"begin update question transaction: %w",
+			err,
+		)
+	}
+
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	const updateQuestionQuery = `
+	UPDATE questions AS q
+	SET
+  text = $1,
+  updated_at = NOW()
+	FROM question_banks AS qb
+	WHERE q.id = $2
+  AND q.question_bank_id = $3
+  AND qb.id = q.question_bank_id
+  AND qb.user_id = $4
+	RETURNING
+  q.id,
+  q.question_bank_id,
+  q.text,
+  q.created_at,
+  q.updated_at;
+	`
+
+	err = tx.QueryRow(ctx, updateQuestionQuery, question.Text, questionID, bankID, userID).Scan(&updatedQuestion.ID,
+		&updatedQuestion.QuestionBankID,
+		&updatedQuestion.Text,
+		&updatedQuestion.CreatedAt,
+		&updatedQuestion.UpdatedAt)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrQuestionNotFound
+		}
+		return nil, fmt.Errorf("update question: %w", err)
+	}
+
+	const deleteOptionsQuery = `
+		DELETE FROM answer_options
+		WHERE question_id = $1;
+	`
+
+	_, err = tx.Exec(
+		ctx,
+		deleteOptionsQuery,
+		updatedQuestion.ID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"delete old answer options: %w",
+			err,
+		)
+	}
+
+	const updateOptionQuery = `
+		INSERT INTO answer_options (
+			question_id,
+			text,
+			position,
+			is_correct
+		)
+		VALUES ($1, $2, $3, $4)
+		RETURNING
+			id,
+			question_id,
+			text,
+			position,
+			is_correct,
+			created_at,
+			updated_at;
+	`
+
+	for _, option := range question.Options {
+		updatedOption := AnswerOption{}
+
+		err := tx.QueryRow(
+			ctx,
+			updateOptionQuery,
+			updatedQuestion.ID,
+			option.Text,
+			option.Position,
+			option.IsCorrect,
+		).Scan(
+			&updatedOption.ID,
+			&updatedOption.QuestionID,
+			&updatedOption.Text,
+			&updatedOption.Position,
+			&updatedOption.IsCorrect,
+			&updatedOption.CreatedAt,
+			&updatedOption.UpdatedAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf(
+				"create answer option at position %d: %w",
+				option.Position,
+				err,
+			)
+		}
+
+		updatedQuestion.Options = append(
+			updatedQuestion.Options,
+			updatedOption,
+		)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf(
+			"commit update question transaction: %w",
+			err,
+		)
+	}
+
+	return updatedQuestion, nil
+}
+
+func (repo *QuestionRepository) Delete(ctx context.Context, userID string, bankID string, questionID string) error {
+	const deleteQuery = `
+	DELETE FROM questions AS q
+	USING question_banks AS qb
+	WHERE q.id = $1
+  AND q.question_bank_id = $2
+  AND qb.id = q.question_bank_id
+  AND qb.user_id = $3;
+	`
+
+	result, err := repo.db.Exec(ctx, deleteQuery, questionID, bankID, userID)
+
+	if err != nil {
+		return fmt.Errorf("delete question: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrQuestionNotFound
+	}
+
+	return nil
+
 }

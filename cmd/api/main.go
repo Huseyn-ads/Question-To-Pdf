@@ -80,6 +80,9 @@ func run() error {
 
 	//Question handler
 	// router.Handle(
+	router.Handle("DELETE /v1/question-banks/{bankID}/questions/{questionID}", userHandler.RequireAuth(http.HandlerFunc(questionHandler.Delete)))
+	router.Handle("PUT /v1/question-banks/{bankID}/questions/{questionID}", userHandler.RequireAuth(http.HandlerFunc(questionHandler.Update)))
+	router.Handle("GET /v1/question-banks/{bankID}/questions", userHandler.RequireAuth(http.HandlerFunc(questionHandler.ListByBankID)))
 	router.Handle("GET /v1/question-banks/{bankID}/questions/{questionID}", userHandler.RequireAuth(http.HandlerFunc(questionHandler.FindByID)))
 	router.Handle("POST /v1/question-banks/{bankID}/questions", userHandler.RequireAuth(http.HandlerFunc(questionHandler.Create)))
 
