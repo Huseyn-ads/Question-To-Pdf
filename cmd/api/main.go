@@ -17,6 +17,7 @@ import (
 
 	"qtp/internal/config"
 	"qtp/internal/database"
+	"qtp/internal/question"
 	"qtp/internal/questionbank"
 	"qtp/internal/session"
 	"qtp/internal/user"
@@ -42,6 +43,11 @@ func run() error {
 
 	pool, err := database.Open(databaseContext, cfg.Database)
 	cancelDatabase()
+
+	//QUESTION
+	questionRepository := question.NewQuestionRepository(pool)
+	questionService := question.NewQuestionService(questionRepository)
+	questionHandler := question.NewQuestionHandler(questionService)
 
 	//QUESTION BANK
 	questionBankRepository := questionbank.NewQuestionBankRepository(pool)
@@ -72,13 +78,16 @@ func run() error {
 
 	router := http.NewServeMux()
 
+	//Question handler
+	// router.Handle(
+	router.Handle("GET /v1/question-banks/{bankID}/questions/{questionID}", userHandler.RequireAuth(http.HandlerFunc(questionHandler.FindByID)))
+	router.Handle("POST /v1/question-banks/{bankID}/questions", userHandler.RequireAuth(http.HandlerFunc(questionHandler.Create)))
+
 	//Question Bank handler
-	//
 	router.Handle("GET /v1/question-banks", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.List)))
 	router.Handle("GET /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Find)))
 	router.Handle("POST /v1/question-banks", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Create)))
-	router.Handle(
-		"PATCH /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Patch)))
+	router.Handle("PATCH /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Patch)))
 	router.Handle("DELETE /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Delete)))
 
 	//AUTH Routes
