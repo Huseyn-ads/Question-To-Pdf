@@ -124,23 +124,7 @@ func (handler *QuestionHandler) FindByID(w http.ResponseWriter, r *http.Request)
 	}
 
 	optionResponses := make([]OptionResponse, 0, len(foundQuestion.Options))
-	for _, option := range foundQuestion.Options {
-		optionResponses = append(optionResponses, OptionResponse{
-			ID:        option.ID,
-			Text:      option.Text,
-			Position:  option.Position,
-			IsCorrect: option.IsCorrect,
-		})
-	}
-
-	response := Response{
-		ID:             foundQuestion.ID,
-		QuestionBankID: foundQuestion.QuestionBankID,
-		Text:           foundQuestion.Text,
-		Options:        optionResponses,
-		CreatedAt:      foundQuestion.CreatedAt,
-		UpdatedAt:      foundQuestion.UpdatedAt,
-	}
+	response := toResponse(optionResponses, foundQuestion)
 
 	httpx.WriteJSON(w, http.StatusOK, response)
 
@@ -195,29 +179,11 @@ func (handler *QuestionHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	optionResponses := make(
-		[]OptionResponse,
-		0,
-		len(createdQuestion.Options),
-	)
+	optionResponses := make([]OptionResponse, 0, len(createdQuestion.Options))
 
-	for _, option := range createdQuestion.Options {
-		optionResponses = append(optionResponses, OptionResponse{
-			ID:        option.ID,
-			Text:      option.Text,
-			Position:  option.Position,
-			IsCorrect: option.IsCorrect,
-		})
-	}
+	response := toResponse(optionResponses, createdQuestion)
 
-	httpx.WriteJSON(w, http.StatusCreated, Response{
-		ID:             createdQuestion.ID,
-		QuestionBankID: createdQuestion.QuestionBankID,
-		Text:           createdQuestion.Text,
-		Options:        optionResponses,
-		CreatedAt:      createdQuestion.CreatedAt,
-		UpdatedAt:      createdQuestion.UpdatedAt,
-	})
+	httpx.WriteJSON(w, http.StatusCreated, response)
 
 }
 
@@ -278,29 +244,9 @@ func (handler *QuestionHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	optionResponses := make(
-		[]OptionResponse,
-		0,
-		len(updatedQuestion.Options),
-	)
+	optionResponses := make([]OptionResponse, 0, len(updatedQuestion.Options))
 
-	for _, option := range updatedQuestion.Options {
-		optionResponses = append(optionResponses, OptionResponse{
-			ID:        option.ID,
-			Text:      option.Text,
-			Position:  option.Position,
-			IsCorrect: option.IsCorrect,
-		})
-	}
-
-	response := Response{
-		ID:             updatedQuestion.ID,
-		QuestionBankID: updatedQuestion.QuestionBankID,
-		Text:           updatedQuestion.Text,
-		Options:        optionResponses,
-		CreatedAt:      updatedQuestion.CreatedAt,
-		UpdatedAt:      updatedQuestion.UpdatedAt,
-	}
+	response := toResponse(optionResponses, updatedQuestion)
 
 	httpx.WriteJSON(w, http.StatusOK, response)
 
