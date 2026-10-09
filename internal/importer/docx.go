@@ -6,100 +6,26 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 )
 
-func TextBeforeFirstOption(paragraph Paragraph) string {
-	styled := FlattenParagraph(paragraph)
-
-	matches := OptionStartPattern.FindAllStringSubmatchIndex(
-		styled.Text,
-		-1,
+func ExtractParagraphs(
+	filePath string,
+) ([]Paragraph, error) {
+	const (
+		wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+		mathNamespace = "http://schemas.openxmlformats.org/officeDocument/2006/math"
+		maxXMLSize    = 20 * 1024 * 1024
 	)
 
-	if len(matches) == 0 {
-		return strings.TrimSpace(styled.Text)
-	}
-
-	firstOptionStart := matches[0][0]
-
-	return strings.TrimSpace(
-		styled.Text[:firstOptionStart],
-	)
-}
-
-func ParseQuestions(
-	paragraphs []Paragraph,
-) []ParsedQuestion {
-	questions := make([]ParsedQuestion, 0)
-	var currentQuestion *ParsedQuestion
-
-	for _, paragraph := range paragraphs {
-		textBeforeOptions :=
-			TextBeforeFirstOption(paragraph)
-
-		options := ParseOptions(paragraph)
-
-		number, questionText, isNumberedLine :=
-			ParseNumberedLine(textBeforeOptions)
-
-		if isNumberedLine {
-			if currentQuestion != nil &&
-				len(currentQuestion.Options) > 0 {
-				questions = append(
-					questions,
-					*currentQuestion,
-				)
-			}
-
-			currentQuestion = &ParsedQuestion{
-				SourceNumber: number,
-				Text:         questionText,
-				Options:      make([]ParsedOption, 0, 5),
-			}
-		} else if currentQuestion != nil &&
-			len(currentQuestion.Options) == 0 &&
-			textBeforeOptions != "" {
-			currentQuestion.Text = strings.TrimSpace(
-				currentQuestion.Text +
-					" " +
-					textBeforeOptions,
-			)
-		}
-
-		if currentQuestion != nil &&
-			len(options) > 0 {
-			currentQuestion.Options = append(
-				currentQuestion.Options,
-				options...,
-			)
-		}
-	}
-
-	if currentQuestion != nil &&
-		len(currentQuestion.Options) > 0 {
-		questions = append(
-			questions,
-			*currentQuestion,
-		)
-	}
-
-	return questions
-}
-
-func ExtractParagraphs(filePath string) ([]Paragraph, error) {
-	const wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-	const mathNamespace = "http://schemas.openxmlformats.org/officeDocument/2006/math"
-	const maxXMLSize = 20 * 1024 * 1024
-
-	// 1. Открываем архив.
 	archive, err := zip.OpenReader(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("open DOCX archive: %w", err)
+		return nil, fmt.Errorf(
+			"open DOCX archive: %w",
+			err,
+		)
 	}
 	defer archive.Close()
 
-	// 2. Находим основной файл документа.
 	var documentFile *zip.File
 
 	for _, file := range archive.File {
@@ -110,17 +36,27 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 	}
 
 	if documentFile == nil {
-		return nil, errors.New("word/document.xml not found")
+		return nil, errors.New(
+			"word/document.xml not found",
+		)
 	}
 
-	// 3. Открываем содержимое найденного файла.
+	if documentFile.UncompressedSize64 >
+		uint64(maxXMLSize) {
+		return nil, errors.New(
+			"document XML exceeds 20 MiB",
+		)
+	}
+
 	xmlReader, err := documentFile.Open()
 	if err != nil {
-		return nil, fmt.Errorf("open document XML: %w", err)
+		return nil, fmt.Errorf(
+			"open document XML: %w",
+			err,
+		)
 	}
 	defer xmlReader.Close()
 
-	// Ограничиваем объём распакованного XML.
 	limitedReader := &io.LimitedReader{
 		R: xmlReader,
 		N: maxXMLSize + 1,
@@ -133,12 +69,13 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 	var currentParagraph *Paragraph
 	var currentRun *TextRun
 
-	// 4. Последовательно читаем XML.
 	for {
 		token, err := decoder.Token()
 
 		if limitedReader.N == 0 {
-			return nil, errors.New("document XML exceeds 20 MiB")
+			return nil, errors.New(
+				"document XML exceeds 20 MiB",
+			)
 		}
 
 		if errors.Is(err, io.EOF) {
@@ -146,37 +83,21 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 		}
 
 		if err != nil {
-			return nil, fmt.Errorf("read document XML: %w", err)
+			return nil, fmt.Errorf(
+				"read document XML: %w",
+				err,
+			)
 		}
 
 		switch element := token.(type) {
 		case xml.StartElement:
 			if element.Name.Space == mathNamespace {
-				if currentRun != nil {
-					currentRun.Text += " [FORMULA] "
-				} else if currentParagraph != nil {
-					currentParagraph.Runs = append(
-						currentParagraph.Runs,
-						TextRun{
-							Text: " [FORMULA] ",
-						},
-					)
-				}
-
-				if err := decoder.Skip(); err != nil {
-					return nil, fmt.Errorf(
-						"skip Word formula: %w",
-						err,
-					)
-				}
-
-				continue
+				return nil, fmt.Errorf(
+					"%w: element %q",
+					ErrMathNotSupported,
+					element.Name.Local,
+				)
 			}
-			// if element.Name.Space == mathNamespace {
-			// 	return nil, errors.New(
-			// 		"Word math is not supported by this extractor yet",
-			// 	)
-			// }
 
 			if element.Name.Space != wordNamespace {
 				continue
@@ -186,7 +107,7 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 			case "p":
 				if currentParagraph != nil {
 					return nil, errors.New(
-						"nested paragraphs are not supported yet",
+						"nested paragraphs are not supported",
 					)
 				}
 
@@ -206,8 +127,14 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 
 				var text string
 
-				if err := decoder.DecodeElement(&text, &element); err != nil {
-					return nil, fmt.Errorf("decode Word text: %w", err)
+				if err := decoder.DecodeElement(
+					&text,
+					&element,
+				); err != nil {
+					return nil, fmt.Errorf(
+						"decode Word text: %w",
+						err,
+					)
 				}
 
 				currentRun.Text += text
@@ -220,12 +147,14 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 				currentRun.Bold = true
 
 				for _, attribute := range element.Attr {
-					if attribute.Name.Space == wordNamespace &&
-						attribute.Name.Local == "val" {
-						switch attribute.Value {
-						case "false", "0", "off":
-							currentRun.Bold = false
-						}
+					if attribute.Name.Space != wordNamespace ||
+						attribute.Name.Local != "val" {
+						continue
+					}
+
+					switch attribute.Value {
+					case "false", "0", "off":
+						currentRun.Bold = false
 					}
 				}
 
@@ -240,36 +169,19 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 				}
 
 			case "rPrChange":
-				// Пропускаем историю изменения оформления.
-				if err := decoder.Skip(); err != nil {
-					return nil, fmt.Errorf("skip formatting history: %w", err)
-				}
-
-			case "drawing", "pict", "object":
-				placeholder := " [MEDIA] "
-
-				if element.Name.Local == "object" {
-					placeholder = " [FORMULA_OBJECT] "
-				}
-
-				if currentRun != nil {
-					currentRun.Text += placeholder
-				} else if currentParagraph != nil {
-					currentParagraph.Runs = append(
-						currentParagraph.Runs,
-						TextRun{
-							Text: placeholder,
-						},
-					)
-				}
-
 				if err := decoder.Skip(); err != nil {
 					return nil, fmt.Errorf(
-						"skip Word element %q: %w",
-						element.Name.Local,
+						"skip formatting history: %w",
 						err,
 					)
 				}
+
+			case "drawing", "pict", "object":
+				return nil, fmt.Errorf(
+					"%w: element %q",
+					ErrMediaNotSupported,
+					element.Name.Local,
+				)
 			}
 
 		case xml.EndElement:
@@ -279,7 +191,8 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 
 			switch element.Name.Local {
 			case "r":
-				if currentParagraph != nil && currentRun != nil {
+				if currentParagraph != nil &&
+					currentRun != nil {
 					currentParagraph.Runs = append(
 						currentParagraph.Runs,
 						*currentRun,
@@ -290,7 +203,10 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 
 			case "p":
 				if currentParagraph != nil {
-					paragraphs = append(paragraphs, *currentParagraph)
+					paragraphs = append(
+						paragraphs,
+						*currentParagraph,
+					)
 				}
 
 				currentParagraph = nil
@@ -300,14 +216,4 @@ func ExtractParagraphs(filePath string) ([]Paragraph, error) {
 	}
 
 	return paragraphs, nil
-}
-
-func (p Paragraph) Text() string {
-	pustaya := ""
-
-	for _, run := range p.Runs {
-		pustaya = pustaya + run.Text
-	}
-
-	return pustaya
 }

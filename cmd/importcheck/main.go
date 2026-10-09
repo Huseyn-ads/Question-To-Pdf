@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"qtp/internal/importer"
-	"strings"
 )
 
 func main() {
@@ -12,112 +11,6 @@ func main() {
 		fmt.Println("Ошибка:", err)
 		return
 	}
-
-	fmt.Println("Абзацев:", len(paragraphs))
-
-	// for i, paragraph := range paragraphs {
-	// 	if i >= 10 {
-	// 		break
-	// 	}
-
-	// 	fmt.Printf("Абзац %d:\n", i+1)
-
-	// 	for _, run := range paragraph.Runs {
-	// 		fmt.Printf("  bold=%t text=%q\n", run.Bold, run.Text)
-	// 	}
-	// }
-
-	// fmt.Println(strings.TrimSpace(paragraphs[4].Text()))
-
-	// number, content, ok := importer.ParseNumberedLine()
-
-	// fmt.Println(number)
-	// fmt.Println(content)
-	// fmt.Println(ok)
-
-	// for _, paragraph := range paragraphs[:20] {
-	// 	text := importer.RemoveTrailingDifficulty(paragraph.Text())
-	// 	label, content, ok := importer.ParseOptionLine(text)
-	// 	if ok {
-	// 		fmt.Printf("%s: %s\n", label, content)
-	// 	}
-	// }
-
-	// for _, paragraph := range paragraphs {
-	// 	text := importer.RemoveTrailingDifficulty(paragraph.Text())
-
-	// 	label, content, ok := importer.ParseOptionLine(text)
-	// 	if !ok {
-	// 		continue
-	// 	}
-
-	// 	fmt.Printf(
-	// 		"%s: %s | correct=%t\n",
-	// 		label,
-	// 		content,
-	// 		importer.IsMostlyBold(paragraph),
-	// 	)
-
-	// 	styled := importer.FlattenParagraph(paragraph)
-
-	// 	fmt.Println(len(styled.Text))
-	// 	fmt.Println(len(styled.BoldAt))
-	// 	fmt.Println(len(styled.Text) == len(styled.BoldAt))
-	// }
-
-	found := 0
-
-	for _, paragraph := range paragraphs {
-		options := importer.ParseOptions(paragraph)
-
-		// if len(options) <= 1 {
-		// 	continue
-		// }
-
-		for _, option := range options {
-			fmt.Printf(
-				"%s: %s | correct=%t\n",
-				option.Label,
-				option.Text,
-				option.IsCorrect,
-			)
-		}
-
-		fmt.Println()
-
-		found++
-
-	}
-
-	totalOptions := 0
-	correctOptions := 0
-	emptyOptions := 0
-	unparsedMarkers := 0
-
-	for _, paragraph := range paragraphs {
-		options := importer.ParseOptions(paragraph)
-
-		for _, option := range options {
-			totalOptions++
-
-			if option.IsCorrect {
-				correctOptions++
-			}
-
-			if strings.TrimSpace(option.Text) == "" {
-				emptyOptions++
-			}
-
-			if importer.OptionStartPattern.MatchString(option.Text) {
-				unparsedMarkers++
-			}
-		}
-	}
-
-	fmt.Println("Total options:", totalOptions)
-	fmt.Println("Correct options:", correctOptions)
-	fmt.Println("Empty options:", emptyOptions)
-	fmt.Println("Unparsed markers:", unparsedMarkers)
 
 	questions := importer.ParseQuestions(paragraphs)
 

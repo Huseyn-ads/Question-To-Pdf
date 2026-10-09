@@ -8,47 +8,43 @@ import (
 	"unicode/utf8"
 )
 
-var numberedLinePattern = regexp.MustCompile(
-	`^[\t\p{Zs}]*(\d+)[.)][\t\p{Zs}]*(.+?)[\t\p{Zs}]*$`,
+var (
+	numberedLinePattern = regexp.MustCompile(
+		`^[\t\p{Zs}]*(\d+)[.)][\t\p{Zs}]*(.+?)[\t\p{Zs}]*$`,
+	)
+
+	optionStartPattern = regexp.MustCompile(
+		`(?i)(^|[\t\r\n\p{Zs};;]+)([A-E])[.)][\t\r\n\p{Zs}]*`,
+	)
+
+	trailingDifficultyPattern = regexp.MustCompile(
+		`(?s)^(.*?)[\t\p{Zs}]{4,}[AOÇaoç]$`,
+	)
 )
-var optionLinePattern = regexp.MustCompile(`^([A-Ea-e])[.)]\s*(.+)$`)
-var OptionStartPattern = regexp.MustCompile(`(?i)(^|[\t\r\n\p{Zs};;]+)([A-E])[.)][\t\r\n\p{Zs}]*`)
 
-var trailingDifficultyPattern = regexp.MustCompile(`(?s)^(.*?)[\t\p{Zs}]{4,}[AOÇaoç]$`)
+type styledParagraph struct {
+	Text   string
+	BoldAt []bool
+}
 
-func ParseNumberedLine(text string) (int, string, bool) {
+func parseNumberedLine(text string) (int, string, bool) {
 	matches := numberedLinePattern.FindStringSubmatch(text)
 
 	if len(matches) != 3 {
 		return 0, "", false
 	}
 
-	questionNumber, err := strconv.Atoi(matches[1])
+	number, err := strconv.Atoi(matches[1])
 	if err != nil {
 		return 0, "", false
 	}
 
 	content := strings.TrimSpace(matches[2])
 
-	return questionNumber, content, true
+	return number, content, true
 }
 
-func ParseOptionLine(text string) (label string, content string, ok bool) {
-	text = strings.TrimSpace(text)
-	matches := optionLinePattern.FindStringSubmatch(text)
-
-	if len(matches) != 3 {
-		return "", "", false
-	}
-
-	label = strings.ToUpper(matches[1])
-
-	content = strings.TrimSpace(matches[2])
-
-	return label, content, true
-}
-
-func RemoveTrailingDifficulty(text string) string {
+func removeTrailingDifficulty(text string) string {
 	matches := trailingDifficultyPattern.FindStringSubmatch(text)
 
 	if len(matches) != 2 {
@@ -58,34 +54,19 @@ func RemoveTrailingDifficulty(text string) string {
 	return strings.TrimSpace(matches[1])
 }
 
-func IsMostlyBold(paragraph Paragraph) bool {
-	totalCount := 0
-	boldCount := 0
+func flattenParagraph(
+	paragraph Paragraph,
+) styledParagraph {
+	totalLength := 0
 
 	for _, run := range paragraph.Runs {
-		for _, symbol := range run.Text {
-			if unicode.IsSpace(symbol) {
-				continue
-			}
-
-			totalCount++
-
-			if run.Bold {
-				boldCount++
-			}
-		}
+		totalLength += len(run.Text)
 	}
 
-	if totalCount == 0 {
-		return false
-	}
-
-	return boldCount*2 >= totalCount
-}
-
-func FlattenParagraph(paragraph Paragraph) StyledParagraph {
 	var text strings.Builder
-	boldAt := make([]bool, 0)
+	text.Grow(totalLength)
+
+	boldAt := make([]bool, 0, totalLength)
 
 	for _, run := range paragraph.Runs {
 		text.WriteString(run.Text)
@@ -95,15 +76,20 @@ func FlattenParagraph(paragraph Paragraph) StyledParagraph {
 		}
 	}
 
-	return StyledParagraph{
+	return styledParagraph{
 		Text:   text.String(),
 		BoldAt: boldAt,
 	}
 }
 
-func IsRangeMostlyBold(styled StyledParagraph, start int, end int) bool {
+func isRangeMostlyBold(
+	styled styledParagraph,
+	start int,
+	end int,
+) bool {
 	if start < 0 ||
 		end > len(styled.Text) ||
+		end > len(styled.BoldAt) ||
 		start >= end {
 		return false
 	}
@@ -134,10 +120,12 @@ func IsRangeMostlyBold(styled StyledParagraph, start int, end int) bool {
 	return boldCount*2 >= totalCount
 }
 
-func ParseOptions(paragraph Paragraph) []ParsedOption {
-	styled := FlattenParagraph(paragraph)
+func parseOptions(
+	paragraph Paragraph,
+) []OptionDraft {
+	styled := flattenParagraph(paragraph)
 
-	matches := OptionStartPattern.FindAllStringSubmatchIndex(
+	matches := optionStartPattern.FindAllStringSubmatchIndex(
 		styled.Text,
 		-1,
 	)
@@ -147,7 +135,7 @@ func ParseOptions(paragraph Paragraph) []ParsedOption {
 	}
 
 	options := make(
-		[]ParsedOption,
+		[]OptionDraft,
 		0,
 		len(matches),
 	)
@@ -168,7 +156,7 @@ func ParseOptions(paragraph Paragraph) []ParsedOption {
 		)
 
 		rawText := styled.Text[contentStart:contentEnd]
-		cleanText := RemoveTrailingDifficulty(rawText)
+		cleanText := removeTrailingDifficulty(rawText)
 
 		boldStart := contentStart
 		boldEnd := contentEnd
@@ -182,10 +170,10 @@ func ParseOptions(paragraph Paragraph) []ParsedOption {
 			}
 		}
 
-		options = append(options, ParsedOption{
+		options = append(options, OptionDraft{
 			Label: label,
 			Text:  cleanText,
-			IsCorrect: IsRangeMostlyBold(
+			IsCorrect: isRangeMostlyBold(
 				styled,
 				boldStart,
 				boldEnd,
@@ -194,4 +182,82 @@ func ParseOptions(paragraph Paragraph) []ParsedOption {
 	}
 
 	return options
+}
+
+func textBeforeFirstOption(
+	paragraph Paragraph,
+) string {
+	styled := flattenParagraph(paragraph)
+
+	matches := optionStartPattern.FindAllStringSubmatchIndex(
+		styled.Text,
+		-1,
+	)
+
+	if len(matches) == 0 {
+		return strings.TrimSpace(styled.Text)
+	}
+
+	return strings.TrimSpace(
+		styled.Text[:matches[0][0]],
+	)
+}
+
+func ParseQuestions(
+	paragraphs []Paragraph,
+) []QuestionDraft {
+	questions := make([]QuestionDraft, 0)
+	var currentQuestion *QuestionDraft
+
+	for _, paragraph := range paragraphs {
+		textBeforeOptions :=
+			textBeforeFirstOption(paragraph)
+
+		options := parseOptions(paragraph)
+
+		number, questionText, isNumberedLine :=
+			parseNumberedLine(textBeforeOptions)
+
+		if isNumberedLine {
+			if currentQuestion != nil &&
+				len(currentQuestion.Options) > 0 {
+				questions = append(
+					questions,
+					*currentQuestion,
+				)
+			}
+
+			currentQuestion = &QuestionDraft{
+				SourceNumber: number,
+				Text:         questionText,
+				Options:      make([]OptionDraft, 0, 5),
+			}
+		} else if currentQuestion != nil &&
+			len(currentQuestion.Options) == 0 &&
+			textBeforeOptions != "" {
+			currentQuestion.Text = strings.TrimSpace(
+				currentQuestion.Text +
+					" " +
+					textBeforeOptions,
+			)
+		}
+
+		if currentQuestion != nil &&
+			len(options) > 0 {
+			currentQuestion.Options = append(
+				currentQuestion.Options,
+				options...,
+			)
+		}
+	}
+
+	if currentQuestion != nil &&
+		len(currentQuestion.Options) > 0 {
+		questions = append(
+			questions,
+			*currentQuestion,
+		)
+	}
+
+	return questions
 }

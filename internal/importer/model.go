@@ -13,15 +13,3 @@ type StyledParagraph struct {
 	Text   string
 	BoldAt []bool
 }
-
-type ParsedQuestion struct {
-	SourceNumber int
-	Text         string
-	Options      []ParsedOption
-}
-
-type ParsedOption struct {
-	Label     string
-	Text      string
-	IsCorrect bool
-}
