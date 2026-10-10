@@ -8,8 +8,3 @@ type TextRun struct {
 type Paragraph struct {
 	Runs []TextRun
 }
-
-type StyledParagraph struct {
-	Text   string
-	BoldAt []bool
-}

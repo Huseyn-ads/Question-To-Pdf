@@ -19,6 +19,7 @@ import (
 	"qtp/internal/database"
 	"qtp/internal/question"
 	"qtp/internal/questionbank"
+	"qtp/internal/questionimport"
 	"qtp/internal/session"
 	"qtp/internal/user"
 )
@@ -61,6 +62,11 @@ func run() error {
 	userService := user.NewUserService(userRepository, sessionRepository)
 	userHandler := user.NewUserHandler(userService)
 
+	// File uploading
+	questionImportService := questionimport.NewService(questionBankService)
+
+	questionImportHandler := questionimport.NewHandler(questionImportService)
+
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}
@@ -79,7 +85,6 @@ func run() error {
 	router := http.NewServeMux()
 
 	//Question handler
-	// router.Handle(
 	router.Handle("DELETE /v1/question-banks/{bankID}/questions/{questionID}", userHandler.RequireAuth(http.HandlerFunc(questionHandler.Delete)))
 	router.Handle("PUT /v1/question-banks/{bankID}/questions/{questionID}", userHandler.RequireAuth(http.HandlerFunc(questionHandler.Update)))
 	router.Handle("GET /v1/question-banks/{bankID}/questions", userHandler.RequireAuth(http.HandlerFunc(questionHandler.ListByBankID)))
@@ -101,6 +106,10 @@ func run() error {
 
 	router.HandleFunc("GET /health", healthHandler)
 	router.HandleFunc("GET /ready", readyHandler(pool))
+
+	//File Uploading
+	router.Handle(
+		"POST /v1/question-banks/{bankID}/imports/preview", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Preview)))
 
 	server := &http.Server{
 		Addr: net.JoinHostPort(
