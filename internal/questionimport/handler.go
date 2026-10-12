@@ -1,11 +1,15 @@
 package questionimport
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"qtp/internal/httpx"
+	"qtp/internal/questionbank"
 	"qtp/internal/user"
 	"strings"
 )
@@ -106,4 +110,55 @@ func (handler *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, result)
+}
+
+func (handler *Handler) Import(w http.ResponseWriter, r *http.Request) {
+	var req ImportRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	bankID := r.PathValue("bankID")
+
+	importResponse, err := handler.service.Import(r.Context(), currentUser.ID, bankID, req)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, questionbank.ErrInvalidQuestionBankID):
+			httpx.WriteError(
+				w,
+				http.StatusBadRequest,
+				questionbank.ErrInvalidQuestionBankID.Error(),
+			)
+
+		case errors.Is(err, questionbank.ErrQuestionBankNotFound):
+			httpx.WriteError(
+				w,
+				http.StatusNotFound,
+				questionbank.ErrQuestionBankNotFound.Error(),
+			)
+
+		default:
+			slog.Error("import questions", "error", err)
+			httpx.WriteError(
+				w,
+				http.StatusInternalServerError,
+				"server error",
+			)
+		}
+
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusCreated, importResponse)
 }

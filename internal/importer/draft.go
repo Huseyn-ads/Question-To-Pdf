@@ -13,7 +13,15 @@ type QuestionDraft struct {
 }
 
 type PreviewResult struct {
-	QuestionsCount int             `json:"questions_count"`
-	Warnings       []string        `json:"warnings"`
-	Questions      []QuestionDraft `json:"questions"`
+	QuestionsCount int               `json:"questions_count"`
+	CanImport      bool              `json:"can_import"`
+	Issues         []ValidationIssue `json:"issues"`
+	Questions      []QuestionDraft   `json:"questions"`
+}
+
+type ValidationIssue struct {
+	SourceNumber int    `json:"source_number,omitempty"`
+	Field        string `json:"field,omitempty"`
+	Code         string `json:"code"`
+	Message      string `json:"message"`
 }

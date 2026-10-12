@@ -63,8 +63,7 @@ func run() error {
 	userHandler := user.NewUserHandler(userService)
 
 	// File uploading
-	questionImportService := questionimport.NewService(questionBankService)
-
+	questionImportService := questionimport.NewService(questionBankService, questionRepository)
 	questionImportHandler := questionimport.NewHandler(questionImportService)
 
 	if err != nil {
@@ -108,9 +107,8 @@ func run() error {
 	router.HandleFunc("GET /ready", readyHandler(pool))
 
 	//File Uploading
-	router.Handle(
-		"POST /v1/question-banks/{bankID}/imports/preview", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Preview)))
-
+	router.Handle("POST /v1/question-banks/{bankID}/imports/preview", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Preview)))
+	router.Handle("POST /v1/question-banks/{bankID}/imports", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Import)))
 	server := &http.Server{
 		Addr: net.JoinHostPort(
 			"",

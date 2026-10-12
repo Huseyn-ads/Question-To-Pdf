@@ -489,3 +489,60 @@ func (repo *QuestionRepository) Delete(ctx context.Context, userID string, bankI
 	return nil
 
 }
+
+func (repo *QuestionRepository) CreateMany(ctx context.Context, userID string, bankID string, questions []Question) error {
+	tx, err := repo.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin create many question transaction: %w", err)
+	}
+
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const checkingQuery = `
+		SELECT id
+		FROM question_banks
+		WHERE id = $1 AND user_id = $2;
+	`
+
+	var foundBankID string
+
+	err = tx.QueryRow(
+		ctx,
+		checkingQuery,
+		bankID,
+		userID,
+	).Scan(&foundBankID)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return questionbank.ErrQuestionBankNotFound
+		}
+
+		return fmt.Errorf("check question bank ownership: %w", err)
+	}
+
+	const questionQuery = `INSERT INTO questions (question_bank_id, text) VALUES ($1, $2) RETURNING id;`
+	const optionQuery = `INSERT INTO answer_options (question_id,text,position,is_correct)VALUES ($1, $2, $3, $4);`
+	for _, question := range questions {
+		var questionID string
+		err = tx.QueryRow(ctx, questionQuery, bankID, question.Text).Scan(&questionID)
+		if err != nil {
+			return fmt.Errorf("insert question in questions: %w", err)
+		}
+		for index, option := range question.Options {
+			_, err = tx.Exec(ctx, optionQuery, questionID, option.Text, index+1, option.IsCorrect)
+			if err != nil {
+				return fmt.Errorf("insert option in options: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf(
+			"commit create many questions transaction: %w",
+			err,
+		)
+	}
+
+	return nil
+}
