@@ -8,4 +8,5 @@ var (
 	ErrInvalidQuestionCount = errors.New("incorrect question count")
 	ErrNotEnoughtQuestions  = errors.New("not enough questions in bank")
 	ErrInvalidTimeLimiter   = errors.New("incorrect time limiter")
+	ErrWrongQuizQuestionID  = errors.New("invalid quiz question id")
 )
