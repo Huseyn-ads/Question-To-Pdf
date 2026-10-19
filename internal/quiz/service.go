@@ -1,0 +1,104 @@
+package quiz
+
+import (
+	"context"
+	"fmt"
+	"math/rand/v2"
+	"qtp/internal/question"
+	"qtp/internal/questionbank"
+
+	"github.com/google/uuid"
+)
+
+type QuizService struct {
+	repository      *QuizRepository
+	questionService *question.QuestionService
+}
+
+func NewQuizService(repository *QuizRepository, questionService *question.QuestionService) *QuizService {
+	return &QuizService{
+		repository:      repository,
+		questionService: questionService,
+	}
+}
+
+func (s *QuizService) CreateQuiz(ctx context.Context, userID string, bankID string, request CreateRequest) (*Quiz, error) {
+	quiz := Quiz{
+		QuestionBankID:   bankID,
+		QuestionCount:    request.QuestionCount,
+		TimeLimitMinutes: request.TimeLimitMinutes,
+		ShuffleOptions:   request.ShuffleOptions,
+		Questions:        make([]QuizQuestion, 0),
+	}
+	if _, err := uuid.Parse(bankID); err != nil {
+		return nil, questionbank.ErrInvalidQuestionBankID
+	}
+
+	if request.QuestionCount <= 0 {
+		return nil, ErrInvalidQuestionCount
+	}
+
+	if request.TimeLimitMinutes < 0 || request.TimeLimitMinutes > 180 {
+		return nil, ErrInvalidTimeLimiter
+	}
+
+	questions, err := s.questionService.ListByBankID(ctx, userID, bankID)
+
+	if err != nil {
+		return nil, fmt.Errorf("getting questions from ListByBankID: %w", err)
+	}
+
+	if len(questions) == 0 {
+		return nil, ErrEmptyQuestions
+	}
+
+	if request.QuestionCount > len(questions) {
+		return nil, ErrNotEnoughtQuestions
+	}
+
+	shuffled := append([]question.Question(nil), questions...)
+	rand.Shuffle(len(shuffled), func(i, j int) {
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	})
+
+	for index, question := range shuffled {
+		if index >= request.QuestionCount {
+			break
+		}
+		qQuestion := QuizQuestion{
+			QuizID:   quiz.ID,
+			Text:     question.Text,
+			Position: index + 1,
+			Options:  make([]QuizAnswerOptions, 0),
+		}
+
+		for index, option := range question.Options {
+			qAnswerOption := QuizAnswerOptions{
+				QuizQuestionID: qQuestion.ID,
+				Text:           option.Text,
+				Position:       index + 1,
+				IsCorrect:      option.IsCorrect,
+			}
+			qQuestion.Options = append(qQuestion.Options, qAnswerOption)
+		}
+		if request.ShuffleOptions {
+			rand.Shuffle(len(qQuestion.Options), func(i, j int) {
+				qQuestion.Options[i], qQuestion.Options[j] = qQuestion.Options[j], qQuestion.Options[i]
+			})
+		}
+
+		for index := range qQuestion.Options {
+			qQuestion.Options[index].Position = index + 1
+		}
+
+		quiz.Questions = append(quiz.Questions, qQuestion)
+	}
+
+	createdQuiz, err := s.repository.Create(ctx, userID, bankID, quiz)
+
+	if err != nil {
+		return nil, fmt.Errorf("create quiz: %w", err)
+	}
+
+	return createdQuiz, nil
+}

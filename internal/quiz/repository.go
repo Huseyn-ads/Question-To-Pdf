@@ -201,7 +201,7 @@ func (repo *QuizRepository) Create(ctx context.Context, userID string, bankID st
 
 	for _, question := range quiz.Questions {
 		createdQuestion := QuizQuestion{
-			Options: make([]QuizAnswerOptions, len(question.Options)),
+			Options: make([]QuizAnswerOptions, 0, len(question.Options)),
 		}
 		err = tx.QueryRow(ctx, questionCreateQuery, createdQuiz.ID, question.Text, question.Position).Scan(&createdQuestion.ID, &createdQuestion.QuizID, &createdQuestion.Text, &createdQuestion.Position)
 		if err != nil {
