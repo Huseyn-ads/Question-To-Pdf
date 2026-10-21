@@ -72,3 +72,34 @@ func (handler *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, quizResponse)
 
 }
+
+func (handler *QuizHandler) GetQuiz(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	quizID := r.PathValue("quizID")
+
+	foundedQuiz, err := handler.service.FindByOwnedID(r.Context(), currentUser.ID, quizID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidQuizID):
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, ErrQuizNotFound):
+			httpx.WriteError(w, http.StatusNotFound, err.Error())
+		default:
+			slog.Error("find quiz", "error", err)
+			httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+
+	quizQuestionResponse := make([]QuizQuestionResponse, 0, len(foundedQuiz.Questions))
+	response := toResponseQuiz(quizQuestionResponse, foundedQuiz)
+
+	httpx.WriteJSON(w, http.StatusOK, response)
+}

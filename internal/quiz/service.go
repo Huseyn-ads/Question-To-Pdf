@@ -2,6 +2,7 @@ package quiz
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"qtp/internal/question"
@@ -20,6 +21,26 @@ func NewQuizService(repository *QuizRepository, questionService *question.Questi
 		repository:      repository,
 		questionService: questionService,
 	}
+}
+
+func (s *QuizService) FindByOwnedID(ctx context.Context, userID string, quizID string) (*Quiz, error) {
+	if _, err := uuid.Parse(quizID); err != nil {
+		return nil, questionbank.ErrInvalidQuestionBankID
+	}
+
+	foundedQuiz, err := s.repository.FindByOwnedID(ctx, userID, quizID)
+
+	if err != nil {
+		if errors.Is(err, ErrInvalidQuizID) {
+			return nil, ErrInvalidQuizID
+		}
+		if errors.Is(err, ErrQuizNotFound) {
+			return nil, ErrQuizNotFound
+		}
+		return nil, fmt.Errorf("found quiz: %w", err)
+	}
+
+	return foundedQuiz, nil
 }
 
 func (s *QuizService) CreateQuiz(ctx context.Context, userID string, bankID string, request CreateRequest) (*Quiz, error) {
