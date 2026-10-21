@@ -23,6 +23,25 @@ func NewQuizService(repository *QuizRepository, questionService *question.Questi
 	}
 }
 
+func (s *QuizService) ListByUserID(ctx context.Context, userID string, limit int, offset int) ([]QuizListItems, error) {
+	if limit <= 0 || limit > 100 {
+		return nil, ErrInvalidLimit
+	}
+
+	if offset < 0 {
+		return nil, ErrInvalidOffset
+	}
+
+	quizzes, err := s.repository.ListByUserID(ctx, userID, limit, offset)
+
+	if err != nil {
+		return nil, fmt.Errorf("list quizzes by user id: %w", err)
+	}
+
+	return quizzes, nil
+
+}
+
 func (s *QuizService) FindByOwnedID(ctx context.Context, userID string, quizID string) (*Quiz, error) {
 	if _, err := uuid.Parse(quizID); err != nil {
 		return nil, questionbank.ErrInvalidQuestionBankID

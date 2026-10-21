@@ -10,4 +10,6 @@ var (
 	ErrInvalidTimeLimiter   = errors.New("incorrect time limiter")
 	ErrWrongQuizQuestionID  = errors.New("invalid quiz question id")
 	ErrEmptyQuestions       = errors.New("there is no questions")
+	ErrInvalidLimit         = errors.New("invalid limit")
+	ErrInvalidOffset        = errors.New("invalid offset")
 )

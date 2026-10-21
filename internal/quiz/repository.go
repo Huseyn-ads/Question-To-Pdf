@@ -20,6 +20,56 @@ func NewQuizRepository(db *pgxpool.Pool) *QuizRepository {
 	}
 }
 
+func (repo *QuizRepository) ListByUserID(ctx context.Context, userID string, limit int, offset int) ([]QuizListItems, error) {
+	quizzes := make([]QuizListItems, 0)
+
+	const query = `
+	SELECT
+	q.id,
+	q.question_bank_id,
+	q.question_count,
+	q.time_limit_minutes,
+	q.shuffle_options,
+	q.created_at
+	FROM quizzes q
+	WHERE user_id = $1
+	ORDER BY created_at DESC, id DESC
+	LIMIT $2 OFFSET $3;
+	`
+
+	rows, err := repo.db.Query(ctx, query, userID, limit, offset)
+
+	if err != nil {
+		return nil, fmt.Errorf("query quizzes by user id: %w", err)
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		currentQuiz := QuizListItems{}
+		err := rows.Scan(
+			&currentQuiz.ID,
+			&currentQuiz.QuestionBankID,
+			&currentQuiz.QuestionCount,
+			&currentQuiz.TimeLimitMinutes,
+			&currentQuiz.ShuffleOptions,
+			&currentQuiz.CreatedAt,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("scan quiz: %w", err)
+		}
+
+		quizzes = append(quizzes, currentQuiz)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate quizzes by user ID: %w", err)
+	}
+
+	return quizzes, nil
+}
+
 func (repo *QuizRepository) FindByOwnedID(ctx context.Context, userID string, quizID string) (*Quiz, error) {
 	quiz := Quiz{
 		Questions: make([]QuizQuestion, 0),

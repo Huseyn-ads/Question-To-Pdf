@@ -41,7 +41,18 @@ type QuizAnswerOptionsResponse struct {
 }
 
 type QuizListResponse struct {
-	Items []QuizResponse `json:"items"`
+	Items  []QuizListItems `json:"items"`
+	Limit  int             `json:"limit"`
+	Offset int             `json:"offset"`
+}
+
+type QuizListItems struct {
+	ID               string    `json:"id"`
+	QuestionBankID   string    `json:"question_bank_id"`
+	QuestionCount    int       `json:"question_count"`
+	TimeLimitMinutes int       `json:"time_limit_minutes"`
+	ShuffleOptions   bool      `json:"shuffle_options"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type QuizPage struct {

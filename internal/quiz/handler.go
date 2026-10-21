@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"qtp/internal/httpx"
 	"qtp/internal/user"
+	"strconv"
 )
 
 type QuizHandler struct {
@@ -73,7 +74,7 @@ func (handler *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (handler *QuizHandler) GetQuiz(w http.ResponseWriter, r *http.Request) {
+func (handler *QuizHandler) FindQuizByOwnID(w http.ResponseWriter, r *http.Request) {
 	currentUser, ok := user.UserFromContext(r.Context())
 
 	if !ok {
@@ -100,6 +101,65 @@ func (handler *QuizHandler) GetQuiz(w http.ResponseWriter, r *http.Request) {
 
 	quizQuestionResponse := make([]QuizQuestionResponse, 0, len(foundedQuiz.Questions))
 	response := toResponseQuiz(quizQuestionResponse, foundedQuiz)
+
+	httpx.WriteJSON(w, http.StatusOK, response)
+}
+
+func (handler *QuizHandler) List(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	limit := 20
+	offset := 0
+
+	query := r.URL.Query()
+
+	if value := query.Get("limit"); value != "" {
+		parsedLimit, err := strconv.Atoi(value)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, "limit must be an integer")
+			return
+		}
+
+		limit = parsedLimit
+	}
+
+	if value := query.Get("offset"); value != "" {
+		parsedOffset, err := strconv.Atoi(value)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, "offset must be an integer")
+			return
+		}
+
+		offset = parsedOffset
+	}
+
+	quizzes, err := handler.service.ListByUserID(r.Context(), currentUser.ID, limit, offset)
+
+	if err != nil {
+		if errors.Is(err, ErrInvalidLimit) {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if errors.Is(err, ErrInvalidOffset) {
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		slog.Error("list quizzes by user id", "error", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+
+	response := QuizListResponse{
+		Items:  quizzes,
+		Limit:  limit,
+		Offset: offset,
+	}
 
 	httpx.WriteJSON(w, http.StatusOK, response)
 }
