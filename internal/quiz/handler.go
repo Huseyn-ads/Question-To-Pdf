@@ -163,3 +163,32 @@ func (handler *QuizHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	httpx.WriteJSON(w, http.StatusOK, response)
 }
+
+func (handler *QuizHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	quizID := r.PathValue("quizID")
+
+	err := handler.service.Delete(r.Context(), currentUser.ID, quizID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrQuizNotFound):
+			httpx.WriteError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, ErrInvalidQuizID):
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		default:
+			slog.Error("delete quiz", "error", err)
+			httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+}

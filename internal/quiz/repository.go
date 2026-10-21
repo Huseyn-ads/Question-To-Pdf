@@ -275,3 +275,24 @@ func (repo *QuizRepository) Create(ctx context.Context, userID string, bankID st
 
 	return &createdQuiz, nil
 }
+
+func (repo *QuizRepository) Delete(ctx context.Context, userID string, quizID string) error {
+	const query = `
+	DELETE FROM quizzes
+	WHERE id = $1
+	AND user_id = $2
+	`
+
+	result, err := repo.db.Exec(ctx, query, quizID, userID)
+
+	if err != nil {
+		return fmt.Errorf("delete quiz: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return ErrQuizNotFound
+	}
+
+	return nil
+
+}

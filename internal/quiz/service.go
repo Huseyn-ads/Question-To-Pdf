@@ -142,3 +142,21 @@ func (s *QuizService) CreateQuiz(ctx context.Context, userID string, bankID stri
 
 	return createdQuiz, nil
 }
+
+func (s *QuizService) Delete(ctx context.Context, userID string, quizID string) error {
+	if _, err := uuid.Parse(quizID); err != nil {
+		return ErrInvalidQuizID
+	}
+
+	err := s.repository.Delete(ctx, userID, quizID)
+
+	if err != nil {
+		if errors.Is(err, ErrQuizNotFound) {
+			return ErrQuizNotFound
+		}
+		return fmt.Errorf("delete quiz: %w", err)
+	}
+
+	return nil
+
+}
