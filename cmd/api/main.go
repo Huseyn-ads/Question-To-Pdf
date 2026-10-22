@@ -20,6 +20,7 @@ import (
 	"qtp/internal/question"
 	"qtp/internal/questionbank"
 	"qtp/internal/questionimport"
+	"qtp/internal/quiz"
 	"qtp/internal/session"
 	"qtp/internal/user"
 )
@@ -66,6 +67,11 @@ func run() error {
 	questionImportService := questionimport.NewService(questionBankService, questionRepository)
 	questionImportHandler := questionimport.NewHandler(questionImportService)
 
+	//QUIZ
+	quizRepository := quiz.NewQuizRepository(pool)
+	quizService := quiz.NewQuizService(quizRepository, questionService)
+	quizHandler := quiz.NewQuizHandler(quizService)
+
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}
@@ -109,6 +115,13 @@ func run() error {
 	//File Uploading
 	router.Handle("POST /v1/question-banks/{bankID}/imports/preview", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Preview)))
 	router.Handle("POST /v1/question-banks/{bankID}/imports", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Import)))
+
+	//Quiz
+	router.Handle("POST /v1/question-banks/{bankID}/quizzes", userHandler.RequireAuth(http.HandlerFunc(quizHandler.CreateQuiz)))
+	router.Handle("GET /v1/quizzes/{quizID}", userHandler.RequireAuth(http.HandlerFunc(quizHandler.FindQuizByOwnID)))
+	router.Handle("GET /v1/quizzes", userHandler.RequireAuth(http.HandlerFunc(quizHandler.List)))
+	router.Handle("DELETE /v1/quizzes/{quizID}", userHandler.RequireAuth(http.HandlerFunc(quizHandler.Delete)))
+
 	server := &http.Server{
 		Addr: net.JoinHostPort(
 			"",
