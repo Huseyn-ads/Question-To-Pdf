@@ -3,5 +3,6 @@ package attempt
 import "errors"
 
 var (
-	ErrAttemptNotFound = errors.New("attempt not found")
+	ErrInvalidAttemptID = errors.New("invalid attempt id")
+	ErrAttemptNotFound  = errors.New("attempt not found")
 )

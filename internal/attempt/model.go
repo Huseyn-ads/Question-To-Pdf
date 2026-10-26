@@ -22,7 +22,29 @@ type Attempt struct {
 	GradableCount int
 }
 
-type AttemptAnswers struct {
+type AttemptDetails struct {
+	Attempt
+	ServerTime time.Time
+	Questions  []AttemptQuestion
+	Answers    []AttemptAnswer
+}
+
+type AttemptQuestion struct {
+	ID       string
+	QuizID   string
+	Text     string
+	Position int
+	Options  []AttemptOption
+}
+
+type AttemptOption struct {
+	ID             string
+	QuizQuestionID string
+	Text           string
+	Position       int
+}
+
+type AttemptAnswer struct {
 	ID                 string
 	QuizAttemptID      string
 	QuizQuestionID     string

@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"qtp/internal/attempt"
 	"qtp/internal/config"
 	"qtp/internal/database"
 	"qtp/internal/question"
@@ -72,6 +73,11 @@ func run() error {
 	quizService := quiz.NewQuizService(quizRepository, questionService)
 	quizHandler := quiz.NewQuizHandler(quizService)
 
+	//ATTEMPT
+	attemptRepository := attempt.NewAttemptRepository(pool)
+	attemptService := attempt.NewAttemptService(attemptRepository)
+	attemptHandler := attempt.NewAttemptHandler(attemptService)
+
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}
@@ -121,6 +127,10 @@ func run() error {
 	router.Handle("GET /v1/quizzes/{quizID}", userHandler.RequireAuth(http.HandlerFunc(quizHandler.FindQuizByOwnID)))
 	router.Handle("GET /v1/quizzes", userHandler.RequireAuth(http.HandlerFunc(quizHandler.List)))
 	router.Handle("DELETE /v1/quizzes/{quizID}", userHandler.RequireAuth(http.HandlerFunc(quizHandler.Delete)))
+
+	//Attempt
+	router.Handle("POST /v1/quizzes/{quizID}/attempts", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.Start)))
+	router.Handle("GET /v1/attempts/{attemptID", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.Get)))
 
 	server := &http.Server{
 		Addr: net.JoinHostPort(
