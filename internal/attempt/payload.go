@@ -1,0 +1,38 @@
+package attempt
+
+import (
+	"qtp/internal/quiz"
+	"time"
+)
+
+type SavedAnswer struct {
+	ID                 string `json:"id"`
+	QuizQuestionID     string `json:"quiz_question_id"`
+	QuizAnswerOptionID string `json:"quiz_answer_option_id"`
+}
+
+type SaveAnswerRequest struct {
+	QuizAnswerOptionID string `json:"quiz_answer_option_id"`
+}
+
+type AttemptResponse struct {
+	ID         string                      `json:"id"`
+	QuizID     string                      `json:"quiz_id"`
+	Status     QuizStatus                  `json:"status"`
+	StartedAt  time.Time                   `json:"started_at"`
+	DeadlineAt *time.Time                  `json:"deadline_at"`
+	FinishedAt *time.Time                  `json:"finished_at"`
+	ServerTime time.Time                   `json:"server_time"`
+	Questions  []quiz.QuizQuestionResponse `json:"questions"`
+	Answers    []SavedAnswer               `json:"answers"`
+}
+
+type ResultResponse struct {
+	ID            string     `json:"id"`
+	QuizID        string     `json:"quiz_id"`
+	Status        QuizStatus `json:"status"`
+	CorrectCount  int        `json:"correct_count"`
+	GradableCount int        `json:"gradable_count"`
+	StartedAt     time.Time  `json:"started_at"`
+	FinishedAt    *time.Time `json:"finished_at"`
+}
