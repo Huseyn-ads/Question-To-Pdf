@@ -130,7 +130,7 @@ func run() error {
 
 	//Attempt
 	router.Handle("POST /v1/quizzes/{quizID}/attempts", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.Start)))
-	router.Handle("GET /v1/attempts/{attemptID", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.Get)))
+	router.Handle("GET /v1/attempts/{attemptID}", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.Get)))
 
 	server := &http.Server{
 		Addr: net.JoinHostPort(

@@ -36,23 +36,24 @@ func (service *AttemptService) GetAttempt(ctx context.Context, userID string, at
 	return details, nil
 }
 
-func (s *AttemptService) Start(ctx context.Context, userID string, quizID string) (*Attempt, error) {
+func (s *AttemptService) Start(ctx context.Context, userID string, quizID string) (*AttemptDetails, bool, error) {
 	if _, err := uuid.Parse(quizID); err != nil {
-		return nil, quiz.ErrInvalidQuizID
+		return nil, false, quiz.ErrInvalidQuizID
 	}
 
-	attempt, _, err := s.repository.Start(ctx, userID, quizID)
-
+	startedAttempt, created, err := s.repository.Start(ctx, userID, quizID)
 	if err != nil {
-		if errors.Is(err, ErrAttemptNotFound) {
-			return nil, ErrAttemptNotFound
-		}
-
-		if errors.Is(err, ErrInvalidAttemptID) {
-			return nil, ErrInvalidAttemptID
-		}
-		return nil, fmt.Errorf("start attempt: %w", err)
+		return nil, false, fmt.Errorf("start attempt: %w", err)
 	}
 
-	return attempt, nil
+	details, err := s.repository.GetAttempt(
+		ctx,
+		userID,
+		startedAttempt.ID,
+	)
+	if err != nil {
+		return nil, false, fmt.Errorf("get started attempt: %w", err)
+	}
+
+	return details, created, nil
 }

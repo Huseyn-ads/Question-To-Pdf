@@ -23,6 +23,7 @@ func (handler *AttemptHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	if !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
 	}
 
 	attemptID := r.PathValue("attemptID")
@@ -53,11 +54,12 @@ func (handler *AttemptHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	if !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
 	}
 
 	quizID := r.PathValue("quizID")
 
-	attempt, err := handler.service.Start(r.Context(), currentUser.ID, quizID)
+	details, created, err := handler.service.Start(r.Context(), currentUser.ID, quizID)
 
 	if err != nil {
 		switch {
@@ -73,17 +75,12 @@ func (handler *AttemptHandler) Start(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := ResultResponse{
-		ID:            attempt.ID,
-		QuizID:        attempt.QuizID,
-		Status:        attempt.Status,
-		CorrectCount:  attempt.CorrectCount,
-		GradableCount: attempt.GradableCount,
-		StartedAt:     attempt.StartedAt,
-		FinishedAt:    attempt.FinishedAt,
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, response)
+	httpx.WriteJSON(w, status, toAttemptResponse(details))
 }
 
 func toAttemptResponse(details *AttemptDetails) AttemptResponse {
