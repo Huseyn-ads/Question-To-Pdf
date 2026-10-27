@@ -9,7 +9,13 @@ type SavedAnswer struct {
 }
 
 type SaveAnswerRequest struct {
-	QuizAnswerOptionID string `json:"quiz_answer_option_id"`
+	OptionID string `json:"option_id"`
+}
+
+type SaveAnswerResponse struct {
+	QuizQuestionID string    `json:"quiz_question_id"`
+	OptionID       string    `json:"option_id"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type AttemptResponse struct {

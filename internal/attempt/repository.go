@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"qtp/internal/quiz"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -354,4 +355,110 @@ func (repo *AttemptRepository) GetAttempt(ctx context.Context, userID string, at
 	}
 
 	return details, nil
+}
+
+func (repo *AttemptRepository) SaveAnswer(ctx context.Context, userID string, attemptID string, quizQuestionID string, optionID string) (*AttemptAnswer, error) {
+
+	tx, err := repo.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin save answer transaction: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	var quizID string
+	var status QuizStatus
+	var deadlineAt *time.Time
+	var deadlineExpired bool
+	const findAttemptQuery = `
+	SELECT qa.quiz_id,
+	qa.status,
+	qa.deadline_at,
+	qa.deadline_at IS NOT NULL AND qa.deadline_at <= NOW() AS deadline_expired
+	FROM quiz_attempts qa
+	JOIN quizzes q
+	ON q.id = qa.quiz_id
+	AND q.user_id = qa.user_id
+	WHERE qa.id = $1 AND qa.user_id = $2
+	FOR UPDATE OF qa;
+	`
+
+	err = tx.QueryRow(ctx, findAttemptQuery, attemptID, userID).Scan(&quizID, &status, &deadlineAt, &deadlineExpired)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAttemptNotFound
+		}
+		return nil, fmt.Errorf("find attempt query: %w", err)
+	}
+
+	if status != "in_progress" || deadlineExpired {
+		return nil, ErrAttemptClosed
+	}
+
+	var validOption bool
+
+	const checkOptionQuery = `
+	SELECT EXISTS (
+		SELECT 1
+		FROM quiz_questions qq
+		JOIN quiz_answer_options qao
+		ON qao.quiz_question_id = qq.id
+		WHERE qq.id = $1
+		AND qq.quiz_id = $2
+		AND qao.id = $3
+	);
+	`
+
+	err = tx.QueryRow(ctx, checkOptionQuery, quizQuestionID, quizID, optionID).Scan(&validOption)
+
+	if err != nil {
+		return nil, fmt.Errorf("check quiz question and option: %w", err)
+	}
+
+	if !validOption {
+		return nil, ErrAnswerTargetNotFound
+	}
+
+	attemptAnswer := AttemptAnswer{}
+
+	const saveAnswerQuery = `
+		INSERT INTO attempt_answers (
+		quiz_attempt_id,
+		quiz_question_id,
+		quiz_answer_option_id
+		)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (quiz_attempt_id, quiz_question_id)
+		DO UPDATE SET
+		quiz_answer_option_id = EXCLUDED.quiz_answer_option_id,
+		updated_at = NOW()
+		RETURNING
+		id,
+		quiz_attempt_id,
+		quiz_question_id,
+		quiz_answer_option_id,
+		updated_at;
+	`
+
+	err = tx.QueryRow(ctx, saveAnswerQuery, attemptID, quizQuestionID, optionID).
+		Scan(
+			&attemptAnswer.ID,
+			&attemptAnswer.QuizAttemptID,
+			&attemptAnswer.QuizQuestionID,
+			&attemptAnswer.QuizAnswerOptionID,
+			&attemptAnswer.UpdatedAt,
+		)
+
+	if err != nil {
+		return nil, fmt.Errorf("save answer: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit save answer transaction: %w", err)
+	}
+
+	return &attemptAnswer, nil
 }

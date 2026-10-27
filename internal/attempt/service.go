@@ -57,3 +57,37 @@ func (s *AttemptService) Start(ctx context.Context, userID string, quizID string
 
 	return details, created, nil
 }
+
+func (s *AttemptService) SaveAnswer(ctx context.Context, userID string, attemptID string, quizQuestionID string, request SaveAnswerRequest) (*AttemptAnswer, error) {
+	if _, err := uuid.Parse(attemptID); err != nil {
+		return nil, ErrInvalidAttemptID
+	}
+
+	if _, err := uuid.Parse(quizQuestionID); err != nil {
+		return nil, quiz.ErrWrongQuizQuestionID
+	}
+
+	if _, err := uuid.Parse(request.OptionID); err != nil {
+		return nil, ErrInvalidOptionID
+	}
+
+	attemptAnswer, err := s.repository.SaveAnswer(ctx, userID, attemptID, quizQuestionID, request.OptionID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAttemptNotFound):
+			return nil, ErrAttemptNotFound
+
+		case errors.Is(err, ErrAnswerTargetNotFound):
+			return nil, ErrAnswerTargetNotFound
+
+		case errors.Is(err, ErrAttemptClosed):
+			return nil, ErrAttemptClosed
+
+		default:
+			return nil, fmt.Errorf("save answer: %w", err)
+		}
+	}
+
+	return attemptAnswer, nil
+}

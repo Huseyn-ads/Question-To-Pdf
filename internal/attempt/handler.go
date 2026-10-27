@@ -1,10 +1,12 @@
 package attempt
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"qtp/internal/httpx"
+	"qtp/internal/quiz"
 	"qtp/internal/user"
 )
 
@@ -81,6 +83,54 @@ func (handler *AttemptHandler) Start(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, status, toAttemptResponse(details))
+}
+
+func (handler *AttemptHandler) SaveAnswer(w http.ResponseWriter, r *http.Request) {
+
+	var req SaveAnswerRequest
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	attemptID := r.PathValue("attemptID")
+	quizQuestionID := r.PathValue("quizQuestionID")
+	attemptAnswer, err := handler.service.SaveAnswer(r.Context(), currentUser.ID, attemptID, quizQuestionID, req)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidAttemptID),
+			errors.Is(err, quiz.ErrWrongQuizQuestionID),
+			errors.Is(err, ErrInvalidOptionID):
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, ErrAttemptNotFound), errors.Is(err, ErrAnswerTargetNotFound):
+			httpx.WriteError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, ErrAttemptClosed):
+			httpx.WriteError(w, http.StatusConflict, err.Error())
+		default:
+			slog.Error("save answer", "error", err)
+			httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+
+	response := SaveAnswerResponse{
+		QuizQuestionID: attemptAnswer.QuizQuestionID,
+		OptionID:       attemptAnswer.QuizAnswerOptionID,
+		UpdatedAt:      attemptAnswer.UpdatedAt,
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, response)
 }
 
 func toAttemptResponse(details *AttemptDetails) AttemptResponse {
