@@ -52,3 +52,49 @@ type ResultResponse struct {
 	StartedAt     time.Time  `json:"started_at"`
 	FinishedAt    *time.Time `json:"finished_at"`
 }
+
+type FinishSummary struct {
+	TotalQuestions    int     `json:"total_questions"`
+	AnsweredQuestions int     `json:"answered_questions"`
+	CorrectAnswers    int     `json:"correct_answers"`
+	WrongAnswers      int     `json:"wrong_answers"`
+	UnansweredAnswers int     `json:"unanswered_questions"`
+	Percentage        float64 `json:"percentage"`
+}
+type FinishResponse struct {
+	AttemptID           string     `json:"attempt_id"`
+	QuizID              string     `json:"quiz_id"`
+	Status              QuizStatus `json:"status"`
+	TotalQuestions      int        `json:"total_questions"`
+	AnsweredQuestions   int        `json:"answered_questions"`
+	CorrectAnswers      int        `json:"correct_answers"`
+	WrongAnswers        int        `json:"wrong_answers"`
+	UnansweredQuestions int        `json:"unanswered_questions"`
+	Percentage          float64    `json:"percentage"`
+	StartedAt           time.Time  `json:"started_at"`
+	FinishedAt          time.Time  `json:"finished_at"`
+
+	CorrectAnswersList []ResultQuestionResponse `json:"correct_answers_list"`
+
+	WrongAnswersList []ResultQuestionResponse `json:"wrong_answers_list"`
+
+	UnansweredQuestionsList []ResultQuestionResponse `json:"unanswered_questions_list"`
+}
+
+type ResultQuestionResponse struct {
+	ID               string                 `json:"id"`
+	Text             string                 `json:"text"`
+	Position         int                    `json:"position"`
+	SelectedOptionID *string                `json:"selected_option_id"`
+	IsCorrect        *bool                  `json:"is_correct"`
+	Options          []ResultOptionResponse `json:"options"`
+}
+
+type ResultOptionResponse struct {
+	ID             string `json:"id"`
+	QuizQuestionID string `json:"quiz_question_id"`
+	Text           string `json:"text"`
+	Position       int    `json:"position"`
+	IsCorrect      bool   `json:"is_correct"`
+	IsSelected     bool   `json:"is_selected"`
+}

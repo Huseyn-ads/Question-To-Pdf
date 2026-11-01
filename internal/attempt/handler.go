@@ -133,6 +133,138 @@ func (handler *AttemptHandler) SaveAnswer(w http.ResponseWriter, r *http.Request
 	httpx.WriteJSON(w, http.StatusOK, response)
 }
 
+func (handler *AttemptHandler) Finish(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	attemptID := r.PathValue("attemptID")
+
+	attemptResult, err := handler.service.Finish(r.Context(), currentUser.ID, attemptID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAttemptNotFound):
+			httpx.WriteError(w, http.StatusNotFound, err.Error())
+		default:
+			slog.Error("finish attempt", "error", err)
+			httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+
+	response := toFinishResponse(attemptResult)
+
+	httpx.WriteJSON(w, http.StatusOK, response)
+
+}
+
+func (handler *AttemptHandler) GetResult(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	attemptID := r.PathValue("attemptID")
+
+	attemptResult, err := handler.service.GetResult(r.Context(), currentUser.ID, attemptID)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAttemptNotFound):
+			httpx.WriteError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, ErrAttemptInProgress):
+			httpx.WriteError(w, http.StatusConflict, err.Error())
+		default:
+			slog.Error("get result", "error", err)
+			httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+
+	response := toFinishResponse(attemptResult)
+
+	httpx.WriteJSON(w, http.StatusOK, response)
+}
+
+func toFinishResponse(result *AttemptResult) FinishResponse {
+	convertQuestions := func(
+		questions []ResultQuestion,
+	) []ResultQuestionResponse {
+		response := make(
+			[]ResultQuestionResponse,
+			0,
+			len(questions),
+		)
+
+		for _, question := range questions {
+			options := make(
+				[]ResultOptionResponse,
+				0,
+				len(question.Options),
+			)
+
+			for _, option := range question.Options {
+				options = append(
+					options,
+					ResultOptionResponse{
+						ID:         option.ID,
+						Text:       option.Text,
+						Position:   option.Position,
+						IsCorrect:  option.IsCorrect,
+						IsSelected: option.IsSelected,
+					},
+				)
+			}
+
+			response = append(
+				response,
+				ResultQuestionResponse{
+					ID:               question.ID,
+					Text:             question.Text,
+					Position:         question.Position,
+					SelectedOptionID: question.SelectedOptionID,
+					IsCorrect:        question.IsCorrect,
+					Options:          options,
+				},
+			)
+		}
+
+		return response
+	}
+
+	return FinishResponse{
+		AttemptID:           result.AttemptID,
+		QuizID:              result.QuizID,
+		Status:              result.Status,
+		TotalQuestions:      result.TotalQuestions,
+		AnsweredQuestions:   result.AnsweredQuestions,
+		CorrectAnswers:      result.CorrectAnswers,
+		WrongAnswers:        result.WrongAnswers,
+		UnansweredQuestions: result.UnansweredQuestions,
+		Percentage:          result.Percentage,
+		StartedAt:           result.StartedAt,
+		FinishedAt:          result.FinishedAt,
+
+		CorrectAnswersList: convertQuestions(
+			result.CorrectAnswersList,
+		),
+
+		WrongAnswersList: convertQuestions(
+			result.WrongAnswersList,
+		),
+
+		UnansweredQuestionsList: convertQuestions(
+			result.UnansweredQuestionsList,
+		),
+	}
+}
+
 func toAttemptResponse(details *AttemptDetails) AttemptResponse {
 	questions := make([]AttemptQuestionResponse, 0, len(details.Questions))
 	for _, question := range details.Questions {

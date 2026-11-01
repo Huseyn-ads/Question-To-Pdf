@@ -91,3 +91,52 @@ func (s *AttemptService) SaveAnswer(ctx context.Context, userID string, attemptI
 
 	return attemptAnswer, nil
 }
+
+func (s *AttemptService) Finish(ctx context.Context, userID string, attemptID string) (*AttemptResult, error) {
+
+	if _, err := uuid.Parse(attemptID); err != nil {
+		return nil, ErrInvalidAttemptID
+	}
+
+	attemptResult, err := s.repository.Finish(ctx, userID, attemptID)
+
+	if err != nil {
+
+		if errors.Is(err, ErrAttemptNotFound) {
+			return nil, ErrAttemptNotFound
+		}
+		return nil, fmt.Errorf("finish attempt result: %w", err)
+	}
+
+	return attemptResult, nil
+
+}
+
+func (s *AttemptService) GetResult(ctx context.Context, userID string, attemptID string) (*AttemptResult, error) {
+	if _, err := uuid.Parse(attemptID); err != nil {
+		return nil, ErrInvalidAttemptID
+	}
+
+	attemptResult, err := s.repository.GetResult(
+		ctx,
+		userID,
+		attemptID,
+	)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrAttemptNotFound):
+			return nil, ErrAttemptNotFound
+
+		case errors.Is(err, ErrAttemptInProgress):
+			return nil, ErrAttemptInProgress
+
+		default:
+			return nil, fmt.Errorf(
+				"get attempt result: %w",
+				err,
+			)
+		}
+	}
+
+	return attemptResult, nil
+}

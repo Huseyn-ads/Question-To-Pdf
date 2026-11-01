@@ -51,3 +51,40 @@ type AttemptAnswer struct {
 	QuizAnswerOptionID string
 	UpdatedAt          time.Time
 }
+
+type AttemptResult struct {
+	AttemptID           string
+	QuizID              string
+	Status              QuizStatus
+	TotalQuestions      int
+	AnsweredQuestions   int
+	CorrectAnswers      int
+	WrongAnswers        int
+	UnansweredQuestions int
+	Percentage          float64
+	StartedAt           time.Time
+	FinishedAt          time.Time
+
+	CorrectAnswersList      []ResultQuestion
+	WrongAnswersList        []ResultQuestion
+	UnansweredQuestionsList []ResultQuestion
+}
+
+type ResultQuestion struct {
+	ID               string
+	QuizID           string
+	Text             string
+	Position         int
+	SelectedOptionID *string
+	IsCorrect        *bool
+	Options          []ResultOption
+}
+
+type ResultOption struct {
+	ID             string
+	QuizQuestionID string
+	Text           string
+	Position       int
+	IsCorrect      bool
+	IsSelected     bool
+}

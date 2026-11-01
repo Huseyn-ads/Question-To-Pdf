@@ -8,4 +8,5 @@ var (
 	ErrAttemptClosed        = errors.New("your attempt expired")
 	ErrAnswerTargetNotFound = errors.New("answer target not found")
 	ErrInvalidOptionID      = errors.New("invalid option id")
+	ErrAttemptInProgress    = errors.New("attempt is still in progress")
 )

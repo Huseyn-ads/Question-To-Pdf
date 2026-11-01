@@ -462,3 +462,646 @@ func (repo *AttemptRepository) SaveAnswer(ctx context.Context, userID string, at
 
 	return &attemptAnswer, nil
 }
+
+func (repo *AttemptRepository) Finish(
+	ctx context.Context,
+	userID string,
+	attemptID string,
+) (*AttemptResult, error) {
+	tx, err := repo.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin finish transaction: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	const findAttemptQuery = `
+		SELECT
+			qa.quiz_id,
+			qa.status,
+			qa.started_at,
+			qa.deadline_at IS NOT NULL
+				AND qa.deadline_at <= NOW()
+				AS deadline_expired
+		FROM quiz_attempts qa
+		JOIN quizzes q
+			ON q.id = qa.quiz_id
+			AND q.user_id = qa.user_id
+		WHERE qa.id = $1
+			AND qa.user_id = $2
+		FOR UPDATE OF qa;
+	`
+
+	var quizID string
+	var status QuizStatus
+	var startedAt time.Time
+	var deadlineExpired bool
+
+	err = tx.QueryRow(
+		ctx,
+		findAttemptQuery,
+		attemptID,
+		userID,
+	).Scan(
+		&quizID,
+		&status,
+		&startedAt,
+		&deadlineExpired,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAttemptNotFound
+		}
+
+		return nil, fmt.Errorf("find attempt for finish: %w", err)
+	}
+
+	// Если попытка ещё активна, определяем причину завершения.
+	// Уже закрытая попытка сохраняет свой старый статус.
+	finalStatus := status
+
+	if status == StatusInProgress {
+		finalStatus = StatusCompleted
+
+		if deadlineExpired {
+			finalStatus = StatusExpired
+		}
+	}
+
+	const resultQuery = `
+		SELECT
+			qq.id,
+			qq.quiz_id,
+			qq.text,
+			qq.position,
+
+			aa.quiz_answer_option_id,
+
+			qao.id,
+			qao.quiz_question_id,
+			qao.text,
+			qao.position,
+			qao.is_correct
+
+		FROM quiz_questions qq
+
+		LEFT JOIN attempt_answers aa
+			ON aa.quiz_attempt_id = $1
+			AND aa.quiz_question_id = qq.id
+
+		LEFT JOIN quiz_answer_options qao
+			ON qao.quiz_question_id = qq.id
+
+		WHERE qq.quiz_id = $2
+
+		ORDER BY qq.position, qao.position;
+	`
+
+	rows, err := tx.Query(
+		ctx,
+		resultQuery,
+		attemptID,
+		quizID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query finish result: %w", err)
+	}
+
+	questions := make([]ResultQuestion, 0)
+
+	for rows.Next() {
+		var question ResultQuestion
+		var selectedOptionID *string
+
+		// Эти значения могут быть NULL из-за LEFT JOIN.
+		var optionID *string
+		var optionQuestionID *string
+		var optionText *string
+		var optionPosition *int
+		var optionIsCorrect *bool
+
+		err := rows.Scan(
+			&question.ID,
+			&question.QuizID,
+			&question.Text,
+			&question.Position,
+
+			&selectedOptionID,
+
+			&optionID,
+			&optionQuestionID,
+			&optionText,
+			&optionPosition,
+			&optionIsCorrect,
+		)
+
+		if err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan finish result: %w", err)
+		}
+
+		// SQL возвращает вопрос отдельно для каждого его варианта.
+		// Поэтому сам вопрос добавляем только один раз.
+		isFirstQuestion := len(questions) == 0
+
+		isNewQuestion := isFirstQuestion ||
+			questions[len(questions)-1].ID != question.ID
+
+		if isNewQuestion {
+			question.SelectedOptionID = selectedOptionID
+			question.Options = make([]ResultOption, 0)
+
+			questions = append(questions, question)
+		}
+
+		// У вопроса нет вариантов.
+		if optionID == nil {
+			continue
+		}
+
+		if optionQuestionID == nil ||
+			optionText == nil ||
+			optionPosition == nil ||
+			optionIsCorrect == nil {
+			rows.Close()
+
+			return nil, fmt.Errorf(
+				"incomplete result option data: option_id=%s",
+				*optionID,
+			)
+		}
+
+		// Проверяем, выбрал ли пользователь текущий вариант.
+		isSelected := selectedOptionID != nil &&
+			*selectedOptionID == *optionID
+
+		option := ResultOption{
+			ID:             *optionID,
+			QuizQuestionID: *optionQuestionID,
+			Text:           *optionText,
+			Position:       *optionPosition,
+			IsCorrect:      *optionIsCorrect,
+			IsSelected:     isSelected,
+		}
+
+		lastQuestionIndex := len(questions) - 1
+
+		questions[lastQuestionIndex].Options = append(
+			questions[lastQuestionIndex].Options,
+			option,
+		)
+	}
+
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate finish result: %w", err)
+	}
+
+	rows.Close()
+
+	attemptResult := &AttemptResult{
+		AttemptID:               attemptID,
+		QuizID:                  quizID,
+		Status:                  finalStatus,
+		TotalQuestions:          len(questions),
+		StartedAt:               startedAt,
+		CorrectAnswersList:      make([]ResultQuestion, 0),
+		WrongAnswersList:        make([]ResultQuestion, 0),
+		UnansweredQuestionsList: make([]ResultQuestion, 0),
+	}
+
+	// Теперь каждый вопрос содержит все свои варианты.
+	// Распределяем вопросы по трём спискам.
+	for _, question := range questions {
+		// Пользователь не выбрал ни один вариант.
+		if question.SelectedOptionID == nil {
+			attemptResult.UnansweredQuestions++
+
+			attemptResult.UnansweredQuestionsList = append(
+				attemptResult.UnansweredQuestionsList,
+				question,
+			)
+
+			continue
+		}
+
+		selectedOptionFound := false
+		selectedOptionIsCorrect := false
+
+		// Находим выбранный пользователем вариант.
+		for _, option := range question.Options {
+			if option.IsSelected {
+				selectedOptionFound = true
+				selectedOptionIsCorrect = option.IsCorrect
+				break
+			}
+		}
+
+		if !selectedOptionFound {
+			return nil, fmt.Errorf(
+				"selected option does not belong to question: question_id=%s option_id=%s",
+				question.ID,
+				*question.SelectedOptionID,
+			)
+		}
+
+		question.IsCorrect = &selectedOptionIsCorrect
+
+		attemptResult.AnsweredQuestions++
+
+		if selectedOptionIsCorrect {
+			attemptResult.CorrectAnswers++
+
+			attemptResult.CorrectAnswersList = append(
+				attemptResult.CorrectAnswersList,
+				question,
+			)
+
+			continue
+		}
+
+		attemptResult.WrongAnswers++
+
+		attemptResult.WrongAnswersList = append(
+			attemptResult.WrongAnswersList,
+			question,
+		)
+	}
+
+	if attemptResult.TotalQuestions > 0 {
+		attemptResult.Percentage =
+			float64(attemptResult.CorrectAnswers) /
+				float64(attemptResult.TotalQuestions) * 100
+	}
+
+	const finishAttemptQuery = `
+		UPDATE quiz_attempts
+		SET
+			status = $2,
+			finished_at = COALESCE(finished_at, NOW()),
+			correct_count = $3,
+			gradable_count = $4
+		WHERE id = $1
+			AND user_id = $5
+		RETURNING finished_at;
+	`
+
+	err = tx.QueryRow(
+		ctx,
+		finishAttemptQuery,
+		attemptID,
+		finalStatus,
+		attemptResult.CorrectAnswers,
+		attemptResult.TotalQuestions,
+		userID,
+	).Scan(
+		&attemptResult.FinishedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAttemptNotFound
+		}
+
+		return nil, fmt.Errorf("finish attempt: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit finish transaction: %w", err)
+	}
+
+	return attemptResult, nil
+}
+
+func (repo *AttemptRepository) GetResult(
+	ctx context.Context,
+	userID string,
+	attemptID string,
+) (*AttemptResult, error) {
+	tx, err := repo.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin get result transaction: %w", err)
+	}
+
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	const findAttemptQuery = `
+		SELECT
+			qa.quiz_id,
+			qa.status,
+			qa.started_at,
+			qa.deadline_at,
+			qa.finished_at,
+			qa.deadline_at IS NOT NULL
+				AND qa.deadline_at <= NOW()
+				AS deadline_expired
+		FROM quiz_attempts qa
+		JOIN quizzes q
+			ON q.id = qa.quiz_id
+			AND q.user_id = qa.user_id
+		WHERE qa.id = $1
+			AND qa.user_id = $2
+		FOR UPDATE OF qa;
+	`
+
+	var quizID string
+	var status QuizStatus
+	var startedAt time.Time
+	var deadlineAt *time.Time
+	var finishedAt *time.Time
+	var deadlineExpired bool
+
+	err = tx.QueryRow(
+		ctx,
+		findAttemptQuery,
+		attemptID,
+		userID,
+	).Scan(
+		&quizID,
+		&status,
+		&startedAt,
+		&deadlineAt,
+		&finishedAt,
+		&deadlineExpired,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrAttemptNotFound
+		}
+
+		return nil, fmt.Errorf("find attempt for result: %w", err)
+	}
+
+	// Активная попытка, время которой ещё не закончилось.
+	// Если deadlineAt == nil, deadlineExpired тоже будет false.
+	if status == StatusInProgress && !deadlineExpired {
+		return nil, ErrAttemptInProgress
+	}
+
+	finalStatus := status
+	shouldFinalize := false
+
+	// Попытка ещё записана как in_progress,
+	// но её дедлайн уже наступил.
+	if status == StatusInProgress && deadlineExpired {
+		finalStatus = StatusExpired
+		shouldFinalize = true
+	}
+
+	const resultQuery = `
+		SELECT
+			qq.id,
+			qq.quiz_id,
+			qq.text,
+			qq.position,
+
+			aa.quiz_answer_option_id,
+
+			qao.id,
+			qao.quiz_question_id,
+			qao.text,
+			qao.position,
+			qao.is_correct
+
+		FROM quiz_questions qq
+
+		LEFT JOIN attempt_answers aa
+			ON aa.quiz_attempt_id = $1
+			AND aa.quiz_question_id = qq.id
+
+		LEFT JOIN quiz_answer_options qao
+			ON qao.quiz_question_id = qq.id
+
+		WHERE qq.quiz_id = $2
+
+		ORDER BY qq.position, qao.position;
+	`
+
+	rows, err := tx.Query(
+		ctx,
+		resultQuery,
+		attemptID,
+		quizID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query attempt result: %w", err)
+	}
+
+	questions := make([]ResultQuestion, 0)
+
+	for rows.Next() {
+		var question ResultQuestion
+		var selectedOptionID *string
+
+		var optionID *string
+		var optionQuestionID *string
+		var optionText *string
+		var optionPosition *int
+		var optionIsCorrect *bool
+
+		err := rows.Scan(
+			&question.ID,
+			&question.QuizID,
+			&question.Text,
+			&question.Position,
+
+			&selectedOptionID,
+
+			&optionID,
+			&optionQuestionID,
+			&optionText,
+			&optionPosition,
+			&optionIsCorrect,
+		)
+
+		if err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan attempt result: %w", err)
+		}
+
+		isFirstQuestion := len(questions) == 0
+
+		isNewQuestion := isFirstQuestion ||
+			questions[len(questions)-1].ID != question.ID
+
+		if isNewQuestion {
+			question.SelectedOptionID = selectedOptionID
+			question.Options = make([]ResultOption, 0)
+
+			questions = append(questions, question)
+		}
+
+		if optionID == nil {
+			continue
+		}
+
+		if optionQuestionID == nil ||
+			optionText == nil ||
+			optionPosition == nil ||
+			optionIsCorrect == nil {
+			rows.Close()
+
+			return nil, fmt.Errorf(
+				"incomplete result option data: option_id=%s",
+				*optionID,
+			)
+		}
+
+		isSelected := selectedOptionID != nil &&
+			*selectedOptionID == *optionID
+
+		option := ResultOption{
+			ID:             *optionID,
+			QuizQuestionID: *optionQuestionID,
+			Text:           *optionText,
+			Position:       *optionPosition,
+			IsCorrect:      *optionIsCorrect,
+			IsSelected:     isSelected,
+		}
+
+		lastQuestionIndex := len(questions) - 1
+
+		questions[lastQuestionIndex].Options = append(
+			questions[lastQuestionIndex].Options,
+			option,
+		)
+	}
+
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate attempt result: %w", err)
+	}
+
+	rows.Close()
+
+	attemptResult := &AttemptResult{
+		AttemptID:               attemptID,
+		QuizID:                  quizID,
+		Status:                  finalStatus,
+		TotalQuestions:          len(questions),
+		StartedAt:               startedAt,
+		CorrectAnswersList:      make([]ResultQuestion, 0),
+		WrongAnswersList:        make([]ResultQuestion, 0),
+		UnansweredQuestionsList: make([]ResultQuestion, 0),
+	}
+
+	for _, question := range questions {
+		if question.SelectedOptionID == nil {
+			attemptResult.UnansweredQuestions++
+
+			attemptResult.UnansweredQuestionsList = append(
+				attemptResult.UnansweredQuestionsList,
+				question,
+			)
+
+			continue
+		}
+
+		selectedOptionFound := false
+		selectedOptionIsCorrect := false
+
+		for _, option := range question.Options {
+			if option.IsSelected {
+				selectedOptionFound = true
+				selectedOptionIsCorrect = option.IsCorrect
+				break
+			}
+		}
+
+		if !selectedOptionFound {
+			return nil, fmt.Errorf(
+				"selected option does not belong to question: question_id=%s option_id=%s",
+				question.ID,
+				*question.SelectedOptionID,
+			)
+		}
+
+		question.IsCorrect = &selectedOptionIsCorrect
+		attemptResult.AnsweredQuestions++
+
+		if selectedOptionIsCorrect {
+			attemptResult.CorrectAnswers++
+
+			attemptResult.CorrectAnswersList = append(
+				attemptResult.CorrectAnswersList,
+				question,
+			)
+
+			continue
+		}
+
+		attemptResult.WrongAnswers++
+
+		attemptResult.WrongAnswersList = append(
+			attemptResult.WrongAnswersList,
+			question,
+		)
+	}
+
+	if attemptResult.TotalQuestions > 0 {
+		attemptResult.Percentage =
+			float64(attemptResult.CorrectAnswers) /
+				float64(attemptResult.TotalQuestions) * 100
+	}
+
+	if shouldFinalize {
+		const expireAttemptQuery = `
+			UPDATE quiz_attempts
+			SET
+				status = 'expired',
+				finished_at = deadline_at,
+				correct_count = $2,
+				gradable_count = $3
+			WHERE id = $1
+				AND user_id = $4
+				AND status = 'in_progress'
+			RETURNING finished_at;
+		`
+
+		err = tx.QueryRow(
+			ctx,
+			expireAttemptQuery,
+			attemptID,
+			attemptResult.CorrectAnswers,
+			attemptResult.TotalQuestions,
+			userID,
+		).Scan(
+			&attemptResult.FinishedAt,
+		)
+
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, ErrAttemptNotFound
+			}
+
+			return nil, fmt.Errorf(
+				"expire attempt while getting result: %w",
+				err,
+			)
+		}
+	} else {
+		if finishedAt == nil {
+			return nil, fmt.Errorf(
+				"closed attempt has no finished_at: attempt_id=%s",
+				attemptID,
+			)
+		}
+
+		attemptResult.FinishedAt = *finishedAt
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf(
+			"commit get result transaction: %w",
+			err,
+		)
+	}
+
+	return attemptResult, nil
+}
