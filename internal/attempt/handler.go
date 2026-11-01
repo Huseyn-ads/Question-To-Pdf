@@ -147,6 +147,8 @@ func (handler *AttemptHandler) Finish(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrInvalidAttemptID):
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, ErrAttemptNotFound):
 			httpx.WriteError(w, http.StatusNotFound, err.Error())
 		default:
@@ -176,6 +178,8 @@ func (handler *AttemptHandler) GetResult(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		switch {
+		case errors.Is(err, ErrInvalidAttemptID):
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, ErrAttemptNotFound):
 			httpx.WriteError(w, http.StatusNotFound, err.Error())
 		case errors.Is(err, ErrAttemptInProgress):
