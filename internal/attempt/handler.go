@@ -8,6 +8,7 @@ import (
 	"qtp/internal/httpx"
 	"qtp/internal/quiz"
 	"qtp/internal/user"
+	"strconv"
 )
 
 type AttemptHandler struct {
@@ -192,6 +193,78 @@ func (handler *AttemptHandler) GetResult(w http.ResponseWriter, r *http.Request)
 	}
 
 	response := toFinishResponse(attemptResult)
+
+	httpx.WriteJSON(w, http.StatusOK, response)
+}
+
+func (handler *AttemptHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
+	currentUser, ok := user.UserFromContext(r.Context())
+
+	if !ok {
+		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	quizID := r.PathValue("quizID")
+
+	limit := 20
+	offset := 0
+
+	query := r.URL.Query()
+
+	if value := query.Get("limit"); value != "" {
+		parsedLimit, err := strconv.Atoi(value)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, "limit must be an integer")
+			return
+		}
+
+		limit = parsedLimit
+	}
+
+	if value := query.Get("offset"); value != "" {
+		parsedOffset, err := strconv.Atoi(value)
+		if err != nil {
+			httpx.WriteError(w, http.StatusBadRequest, "offset must be an integer")
+			return
+		}
+
+		offset = parsedOffset
+	}
+
+	attemptSummaries, err := handler.service.GetHistory(r.Context(), currentUser.ID, quizID, limit, offset)
+
+	if err != nil {
+		switch {
+		case errors.Is(err, quiz.ErrInvalidQuizID),
+			errors.Is(err, quiz.ErrInvalidLimit),
+			errors.Is(err, quiz.ErrInvalidOffset):
+			httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, quiz.ErrQuizNotFound):
+			httpx.WriteError(w, http.StatusNotFound, err.Error())
+		default:
+			slog.Error("get attempt history", "error", err)
+			httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		}
+		return
+	}
+
+	response := make([]AttemptSummaryResponse, 0, len(attemptSummaries))
+	for _, attemptSummary := range attemptSummaries {
+		newAttemptSummaryResponse := AttemptSummaryResponse{
+			AttemptID:      attemptSummary.AttemptID,
+			QuizID:         attemptSummary.QuizID,
+			Status:         attemptSummary.Status,
+			StartedAt:      attemptSummary.StartedAt,
+			DeadlineAt:     attemptSummary.DeadlineAt,
+			FinishedAt:     attemptSummary.FinishedAt,
+			CorrectAnswers: attemptSummary.CorrectAnswers,
+			GradableCount:  attemptSummary.GradableCount,
+			Percentage:     attemptSummary.Percentage,
+		}
+
+		response = append(response, newAttemptSummaryResponse)
+	}
 
 	httpx.WriteJSON(w, http.StatusOK, response)
 }

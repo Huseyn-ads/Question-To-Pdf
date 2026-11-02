@@ -140,3 +140,25 @@ func (s *AttemptService) GetResult(ctx context.Context, userID string, attemptID
 
 	return attemptResult, nil
 }
+
+func (s *AttemptService) GetHistory(ctx context.Context, userID string, quizID string, limit int, offset int) ([]AttemptSummary, error) {
+	if _, err := uuid.Parse(quizID); err != nil {
+		return nil, quiz.ErrInvalidQuizID
+	}
+
+	if limit <= 0 || limit > 100 {
+		return nil, quiz.ErrInvalidLimit
+	}
+
+	if offset < 0 {
+		return nil, quiz.ErrInvalidOffset
+	}
+
+	attemptSummaries, err := s.repository.GetHistory(ctx, userID, quizID, limit, offset)
+
+	if err != nil {
+		return nil, fmt.Errorf("get history: %w", err)
+	}
+
+	return attemptSummaries, nil
+}

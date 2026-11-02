@@ -1105,3 +1105,131 @@ func (repo *AttemptRepository) GetResult(
 
 	return attemptResult, nil
 }
+
+func (repo *AttemptRepository) GetHistory(ctx context.Context, userID string, quizID string, limit int, offset int) ([]AttemptSummary, error) {
+	attemptSummaries := make([]AttemptSummary, 0)
+
+	const checkQuery = `
+	SELECT id
+	FROM quizzes
+	WHERE id = $1 AND user_id = $2;
+	`
+
+	var dummyID int
+	err := repo.db.QueryRow(ctx, checkQuery, quizID, userID).Scan(&dummyID)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, quiz.ErrQuizNotFound
+		}
+		return nil, fmt.Errorf("check quiz query: %w", err)
+	}
+
+	var expiredAttemptID string
+	const findExpiredAttemptQuery = `
+		SELECT qa.id
+		FROM quiz_attempts qa
+		JOIN quizzes q
+			ON q.id = qa.quiz_id
+			AND q.user_id = qa.user_id
+		WHERE qa.quiz_id = $1
+			AND qa.user_id = $2
+			AND qa.status = 'in_progress'
+			AND qa.deadline_at IS NOT NULL
+			AND qa.deadline_at <= NOW();
+	`
+
+	err = repo.db.QueryRow(ctx, findExpiredAttemptQuery, quizID, userID).Scan(&expiredAttemptID)
+
+	switch {
+	case err == nil:
+		_, err = repo.GetResult(
+			ctx,
+			userID,
+			expiredAttemptID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"finalize expired attempt: %w",
+				err,
+			)
+		}
+
+	case errors.Is(err, pgx.ErrNoRows):
+		// Просроченной активной попытки нет.
+		// Просто продолжаем получать историю.
+
+	default:
+		return nil, fmt.Errorf(
+			"find expired attempt: %w",
+			err,
+		)
+	}
+
+	const getAttemptsQuery = `
+		SELECT
+			qa.id,
+			qa.quiz_id,
+			qa.status,
+			qa.started_at,
+			qa.deadline_at,
+			qa.finished_at,
+			qa.correct_count,
+			qa.gradable_count,
+			CASE
+				WHEN qa.status IN ('completed', 'expired') THEN
+					CASE
+						WHEN qa.gradable_count > 0 THEN
+							qa.correct_count * 100.0 / qa.gradable_count
+						ELSE 0
+					END
+				ELSE NULL
+			END AS percentage
+		FROM quiz_attempts qa
+		JOIN quizzes q
+			ON q.id = qa.quiz_id
+			AND q.user_id = qa.user_id
+		WHERE qa.quiz_id = $1
+			AND qa.user_id = $2
+		ORDER BY qa.started_at DESC, qa.id DESC
+		LIMIT $3 OFFSET $4;
+	`
+
+	rows, err := repo.db.Query(ctx, getAttemptsQuery, quizID, userID, limit, offset)
+
+	if err != nil {
+		return nil, fmt.Errorf("get attempts: %w", err)
+	}
+	for rows.Next() {
+		attemptSummary := AttemptSummary{}
+		var percentage *float64
+
+		err = rows.Scan(
+			&attemptSummary.AttemptID,
+			&attemptSummary.QuizID,
+			&attemptSummary.Status,
+			&attemptSummary.StartedAt,
+			&attemptSummary.DeadlineAt,
+			&attemptSummary.FinishedAt,
+			&attemptSummary.CorrectAnswers,
+			&attemptSummary.GradableCount,
+			&percentage,
+		)
+		if err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan attempt history: %w", err)
+		}
+		attemptSummary.Percentage = percentage
+
+		attemptSummaries = append(attemptSummaries, attemptSummary)
+	}
+
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate attempt history: %w", err)
+	}
+
+	rows.Close()
+
+	return attemptSummaries, nil
+}

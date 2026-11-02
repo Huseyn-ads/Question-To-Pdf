@@ -53,6 +53,18 @@ type ResultResponse struct {
 	FinishedAt    *time.Time `json:"finished_at"`
 }
 
+type AttemptSummaryResponse struct {
+	AttemptID      string     `json:"attempt_id"`
+	QuizID         string     `json:"quiz_id"`
+	Status         QuizStatus `json:"status"`
+	StartedAt      time.Time  `json:"started_at"`
+	DeadlineAt     *time.Time `json:"deadline_at"`
+	FinishedAt     *time.Time `json:"finished_at"`
+	CorrectAnswers int        `json:"correct_answers"`
+	GradableCount  int        `json:"gradable_count"`
+	Percentage     *float64   `json:"percentage"`
+}
+
 type FinishSummary struct {
 	TotalQuestions    int     `json:"total_questions"`
 	AnsweredQuestions int     `json:"answered_questions"`

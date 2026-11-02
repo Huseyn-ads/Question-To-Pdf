@@ -135,6 +135,7 @@ func run() error {
 
 	router.Handle("POST /v1/attempts/{attemptID}/finish", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.Finish)))
 	router.Handle("GET /v1/attempts/{attemptID}/result", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.GetResult)))
+	router.Handle("GET /v1/quizzes/{quizID}/attempts", userHandler.RequireAuth(http.HandlerFunc(attemptHandler.GetHistory)))
 
 	server := &http.Server{
 		Addr: net.JoinHostPort(

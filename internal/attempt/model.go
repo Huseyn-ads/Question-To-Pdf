@@ -88,3 +88,15 @@ type ResultOption struct {
 	IsCorrect      bool
 	IsSelected     bool
 }
+
+type AttemptSummary struct {
+	AttemptID      string
+	QuizID         string
+	Status         QuizStatus
+	StartedAt      time.Time
+	DeadlineAt     *time.Time
+	FinishedAt     *time.Time
+	CorrectAnswers int
+	GradableCount  int
+	Percentage     *float64
+}
