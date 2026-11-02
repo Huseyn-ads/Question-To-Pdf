@@ -44,7 +44,7 @@ func (s *QuizService) ListByUserID(ctx context.Context, userID string, limit int
 
 func (s *QuizService) FindByOwnedID(ctx context.Context, userID string, quizID string) (*Quiz, error) {
 	if _, err := uuid.Parse(quizID); err != nil {
-		return nil, questionbank.ErrInvalidQuestionBankID
+		return nil, ErrInvalidQuizID
 	}
 
 	foundedQuiz, err := s.repository.FindByOwnedID(ctx, userID, quizID)

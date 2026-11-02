@@ -18,6 +18,7 @@ import (
 	"qtp/internal/attempt"
 	"qtp/internal/config"
 	"qtp/internal/database"
+	"qtp/internal/httpx"
 	"qtp/internal/question"
 	"qtp/internal/questionbank"
 	"qtp/internal/questionimport"
@@ -46,6 +47,10 @@ func run() error {
 
 	pool, err := database.Open(databaseContext, cfg.Database)
 	cancelDatabase()
+	if err != nil {
+		return fmt.Errorf("connect to database: %w", err)
+	}
+	defer pool.Close()
 
 	//QUESTION
 	questionRepository := question.NewQuestionRepository(pool)
@@ -62,7 +67,7 @@ func run() error {
 	sessionRepository := session.NewSessionRepository(pool)
 
 	userService := user.NewUserService(userRepository, sessionRepository)
-	userHandler := user.NewUserHandler(userService)
+	userHandler := user.NewUserHandler(userService, cfg.Security.CookieSecure)
 
 	// File uploading
 	questionImportService := questionimport.NewService(questionBankService, questionRepository)
@@ -73,15 +78,10 @@ func run() error {
 	quizService := quiz.NewQuizService(quizRepository, questionService)
 	quizHandler := quiz.NewQuizHandler(quizService)
 
-	//ATTEMPT
+	// ATTEMPT
 	attemptRepository := attempt.NewAttemptRepository(pool)
 	attemptService := attempt.NewAttemptService(attemptRepository)
 	attemptHandler := attempt.NewAttemptHandler(attemptService)
-
-	if err != nil {
-		return fmt.Errorf("connect to database: %w", err)
-	}
-	defer pool.Close()
 
 	slog.Info(
 		"database connected",
@@ -94,6 +94,13 @@ func run() error {
 	)
 
 	router := http.NewServeMux()
+	loginLimiter := httpx.NewRateLimiter(10, time.Minute, 10000)
+	registerLimiter := httpx.NewRateLimiter(5, time.Hour, 10000)
+	importLimiter := httpx.NewRateLimiter(10, time.Minute, 10000)
+	importKey := func(r *http.Request) string {
+		currentUser, _ := user.UserFromContext(r.Context())
+		return currentUser.ID
+	}
 
 	//Question handler
 	router.Handle("DELETE /v1/question-banks/{bankID}/questions/{questionID}", userHandler.RequireAuth(http.HandlerFunc(questionHandler.Delete)))
@@ -110,17 +117,18 @@ func run() error {
 	router.Handle("DELETE /v1/question-banks/{bankID}", userHandler.RequireAuth(http.HandlerFunc(questionBankHandler.Delete)))
 
 	//AUTH Routes
-	router.HandleFunc("POST /v1/auth/logout", userHandler.Logout)
+	router.Handle("POST /v1/auth/logout", userHandler.RequireAuth(http.HandlerFunc(userHandler.Logout)))
+	router.Handle("GET /v1/auth/csrf", userHandler.RequireAuth(http.HandlerFunc(userHandler.CSRF)))
 	router.Handle("GET /v1/auth/me", userHandler.RequireAuth(http.HandlerFunc(userHandler.Me)))
-	router.HandleFunc("POST /v1/auth/login", userHandler.Login)
-	router.HandleFunc("POST /v1/auth/register", userHandler.Register)
+	router.Handle("POST /v1/auth/login", loginLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.Login)))
+	router.Handle("POST /v1/auth/register", registerLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.Register)))
 
 	router.HandleFunc("GET /health", healthHandler)
 	router.HandleFunc("GET /ready", readyHandler(pool))
 
 	//File Uploading
-	router.Handle("POST /v1/question-banks/{bankID}/imports/preview", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Preview)))
-	router.Handle("POST /v1/question-banks/{bankID}/imports", userHandler.RequireAuth(http.HandlerFunc(questionImportHandler.Import)))
+	router.Handle("POST /v1/question-banks/{bankID}/imports/preview", userHandler.RequireAuth(importLimiter.Middleware(importKey, http.HandlerFunc(questionImportHandler.Preview))))
+	router.Handle("POST /v1/question-banks/{bankID}/imports", userHandler.RequireAuth(importLimiter.Middleware(importKey, http.HandlerFunc(questionImportHandler.Import))))
 
 	//Quiz
 	router.Handle("POST /v1/question-banks/{bankID}/quizzes", userHandler.RequireAuth(http.HandlerFunc(quizHandler.CreateQuiz)))
@@ -142,11 +150,12 @@ func run() error {
 			"",
 			strconv.Itoa(int(cfg.HTTP.Port)),
 		),
-		Handler:           router,
+		Handler:           httpx.Observe(httpx.TrustedOrigin(cfg.Security.PublicOrigin, httpx.JSONRouter(router))),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    16 << 10,
 	}
 
 	serverError := make(chan error, 1)
@@ -189,6 +198,8 @@ func run() error {
 	defer cancelShutdown()
 
 	if err := server.Shutdown(shutdownContext); err != nil {
+		// Force connections closed on grace expiry before waiting for the pool.
+		_ = server.Close()
 		return fmt.Errorf("shutdown server: %w", err)
 	}
 
@@ -206,11 +217,7 @@ func healthHandler(
 	w http.ResponseWriter,
 	_ *http.Request,
 ) {
-	writeJSON(
-		w,
-		http.StatusOK,
-		`{"status":"ok"}`,
-	)
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func readyHandler(pool *pgxpool.Pool) http.HandlerFunc {
@@ -225,30 +232,12 @@ func readyHandler(pool *pgxpool.Pool) http.HandlerFunc {
 		defer cancel()
 
 		if err := pool.Ping(pingContext); err != nil {
-			writeJSON(
-				w,
-				http.StatusServiceUnavailable,
-				`{"status":"not ready"}`,
-			)
+			slog.Error("readiness database check", "error", err)
+			httpx.WriteError(w, http.StatusServiceUnavailable, "not ready")
 
 			return
 		}
 
-		writeJSON(
-			w,
-			http.StatusOK,
-			`{"status":"ready"}`,
-		)
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	}
-}
-
-func writeJSON(
-	w http.ResponseWriter,
-	status int,
-	body string,
-) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	_, _ = fmt.Fprintln(w, body)
 }

@@ -1,7 +1,6 @@
 package attempt
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -66,9 +65,9 @@ func (handler *AttemptHandler) Start(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		switch {
-		case errors.Is(err, ErrInvalidAttemptID):
+		case errors.Is(err, ErrInvalidAttemptID), errors.Is(err, quiz.ErrInvalidQuizID):
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
-		case errors.Is(err, ErrAttemptNotFound):
+		case errors.Is(err, ErrAttemptNotFound), errors.Is(err, quiz.ErrQuizNotFound):
 			httpx.WriteError(w, http.StatusNotFound, err.Error())
 		default:
 			slog.Error("get attempt", "error", err)
@@ -90,17 +89,13 @@ func (handler *AttemptHandler) SaveAnswer(w http.ResponseWriter, r *http.Request
 
 	var req SaveAnswerRequest
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-
 	currentUser, ok := user.UserFromContext(r.Context())
 
 	if !ok {
 		httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxJSONBody) {
 		return
 	}
 

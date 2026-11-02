@@ -2,6 +2,7 @@ package importer
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -11,6 +12,13 @@ import (
 func ExtractParagraphs(
 	filePath string,
 ) ([]Paragraph, error) {
+	return ExtractParagraphsContext(context.Background(), filePath)
+}
+
+func ExtractParagraphsContext(ctx context.Context, filePath string) ([]Paragraph, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	const (
 		wordNamespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 		mathNamespace = "http://schemas.openxmlformats.org/officeDocument/2006/math"
@@ -70,6 +78,9 @@ func ExtractParagraphs(
 	var currentRun *TextRun
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		token, err := decoder.Token()
 
 		if limitedReader.N == 0 {

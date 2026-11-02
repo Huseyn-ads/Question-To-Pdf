@@ -10,6 +10,8 @@ services:
       - "${PORT}:${PORT}"
     environment:
       APP_NAME: ${APP_NAME}
+      APP_ENV: ${APP_ENV:-development}
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
       PORT: ${PORT}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
@@ -29,7 +31,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "${DB_HOST_PORT}:5432"
+      - "127.0.0.1:${DB_HOST_PORT}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:

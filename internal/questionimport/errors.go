@@ -3,6 +3,7 @@ package questionimport
 import "errors"
 
 var (
+	ErrInvalidDocument  = errors.New("invalid or unsupported DOCX document")
 	ErrParsingForm      = errors.New("error parsing form")
 	ErrFileNameRequired = errors.New("file name is required")
 	ErrFileUpload       = errors.New("error while uploading file")

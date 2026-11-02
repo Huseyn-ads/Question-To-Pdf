@@ -85,9 +85,6 @@ func (s *QuestionBankService) Update(ctx context.Context, userID string, bankID 
 		return nil, ErrNoFieldsToUpdate
 	}
 
-	*request.Title = strings.TrimSpace(*request.Title)
-	*request.Description = strings.TrimSpace(*request.Description)
-
 	if request.Title != nil {
 		title := strings.TrimSpace(*request.Title)
 

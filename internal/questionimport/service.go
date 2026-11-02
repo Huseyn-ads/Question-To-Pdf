@@ -37,10 +37,11 @@ func (service *Service) Preview(ctx context.Context, userID string, bankID strin
 	}
 
 	paragraphs, err :=
-		importer.ExtractParagraphs(filePath)
+		importer.ExtractParagraphsContext(ctx, filePath)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"extract DOCX: %w",
+			"%w: %w",
+			ErrInvalidDocument,
 			err,
 		)
 	}
@@ -55,6 +56,11 @@ func (service *Service) Preview(ctx context.Context, userID string, bankID strin
 		Issues:         issues,
 		Questions:      questions,
 	}, nil
+}
+
+func (service *Service) CheckBank(ctx context.Context, userID, bankID string) error {
+	_, err := service.questionBankService.FindByID(ctx, bankID, userID)
+	return err
 }
 
 func (s *Service) Import(ctx context.Context, userID string, bankID string, request ImportRequest) (*ImportResponse, error) {

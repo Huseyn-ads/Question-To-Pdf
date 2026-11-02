@@ -6,7 +6,7 @@ type User struct {
 	ID           string
 	Email        string
 	Name         string
-	PasswordHash string
+	PasswordHash string `json:"-"`
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

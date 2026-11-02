@@ -21,10 +21,10 @@ func NewSessionRepository(db *pgxpool.Pool) *SessionRepository {
 
 func (repo *SessionRepository) Create(ctx context.Context, session *Session) (*Session, error) {
 	createdSession := &Session{}
-	const query = "INSERT INTO sessions (user_id, token_hash, expires_at) VALUES($1, $2, $3) RETURNING id, user_id, token_hash, expires_at, created_at"
-	row := repo.db.QueryRow(ctx, query, session.UserID, session.TokenHash, session.ExpiresAt)
+	const query = "INSERT INTO sessions (user_id, token_hash, expires_at, csrf_token) VALUES($1, $2, $3, $4) RETURNING id, user_id, token_hash, expires_at, created_at, csrf_token"
+	row := repo.db.QueryRow(ctx, query, session.UserID, session.TokenHash, session.ExpiresAt, session.CSRFToken)
 
-	err := row.Scan(&createdSession.ID, &createdSession.UserID, &createdSession.TokenHash, &createdSession.ExpiresAt, &createdSession.CreatedAt)
+	err := row.Scan(&createdSession.ID, &createdSession.UserID, &createdSession.TokenHash, &createdSession.ExpiresAt, &createdSession.CreatedAt, &createdSession.CSRFToken)
 
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
@@ -36,10 +36,10 @@ func (repo *SessionRepository) Create(ctx context.Context, session *Session) (*S
 
 func (repo *SessionRepository) FindActiveByTokenHash(ctx context.Context, tokenHash []byte) (*Session, error) {
 	foundSession := &Session{}
-	const query = "SELECT id, user_id, token_hash, expires_at, created_at FROM sessions WHERE token_hash = $1 AND expires_at > NOW();"
+	const query = "SELECT id, user_id, token_hash, expires_at, created_at, csrf_token FROM sessions WHERE token_hash = $1 AND expires_at > NOW();"
 	row := repo.db.QueryRow(ctx, query, tokenHash)
 
-	err := row.Scan(&foundSession.ID, &foundSession.UserID, &foundSession.TokenHash, &foundSession.ExpiresAt, &foundSession.CreatedAt)
+	err := row.Scan(&foundSession.ID, &foundSession.UserID, &foundSession.TokenHash, &foundSession.ExpiresAt, &foundSession.CreatedAt, &foundSession.CSRFToken)
 	if err != nil {
 
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ const sessionCookieName = "session"
 type contextKey string
 
 const authenticatedUserKey contextKey = "authenticated_user"
+const authenticatedSessionKey contextKey = "authenticated_session"
 
 func (handler *UserHandler) RequireAuth(
 	next http.Handler,
@@ -45,7 +47,7 @@ func (handler *UserHandler) RequireAuth(
 				return
 			}
 
-			currentUser, err := handler.service.CurrentUser(
+			currentUser, currentSession, err := handler.service.CurrentSession(
 				r.Context(),
 				cookie.Value,
 			)
@@ -92,6 +94,16 @@ func (handler *UserHandler) RequireAuth(
 				authenticatedUserKey,
 				currentUser,
 			)
+			ctx = context.WithValue(ctx, authenticatedSessionKey, currentSession)
+
+			if !httpx.IsSafeMethod(r.Method) {
+				provided := r.Header.Get("X-CSRF-Token")
+				if provided == "" || currentSession.CSRFToken == "" ||
+					subtle.ConstantTimeCompare([]byte(provided), []byte(currentSession.CSRFToken)) != 1 {
+					_ = httpx.WriteError(w, http.StatusForbidden, "invalid or missing CSRF token")
+					return
+				}
+			}
 
 			next.ServeHTTP(
 				w,

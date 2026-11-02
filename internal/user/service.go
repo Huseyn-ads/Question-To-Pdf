@@ -15,11 +15,31 @@ import (
 )
 
 type UserService struct {
-	repository        *UserRepository
-	sessionRepository *session.SessionRepository
+	repository        userStore
+	sessionRepository sessionStore
 }
 
-func NewUserService(ur *UserRepository, sr *session.SessionRepository) *UserService {
+type userStore interface {
+	Create(context.Context, *User) (*User, error)
+	FindByEmail(context.Context, string) (*User, error)
+	FindByID(context.Context, string) (*User, error)
+}
+
+type sessionStore interface {
+	Create(context.Context, *session.Session) (*session.Session, error)
+	FindActiveByTokenHash(context.Context, []byte) (*session.Session, error)
+	DeleteByTokenHash(context.Context, []byte) error
+}
+
+var dummyPasswordHash = func() []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte("dummy password for missing accounts"), bcrypt.DefaultCost)
+	if err != nil {
+		panic("cannot initialize password verification")
+	}
+	return hash
+}()
+
+func NewUserService(ur userStore, sr sessionStore) *UserService {
 	return &UserService{
 		repository:        ur,
 		sessionRepository: sr,
@@ -29,13 +49,14 @@ func NewUserService(ur *UserRepository, sr *session.SessionRepository) *UserServ
 func (s *UserService) Authenticate(ctx context.Context, request LoginRequest) (*User, error) {
 	request.Email = strings.ToLower(strings.TrimSpace(request.Email))
 
-	if request.Email == "" || request.Password == "" {
+	if !validEmail(request.Email) || request.Password == "" || len(request.Password) > 72 || !utf8.ValidString(request.Password) {
 		return nil, ErrInvalidCredentials
 	}
 
 	foundUser, err := s.repository.FindByEmail(ctx, request.Email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
+			_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(request.Password))
 			return nil, ErrInvalidCredentials
 		}
 		return nil, fmt.Errorf("find user by email: %w", err)
@@ -72,11 +93,16 @@ func (s *UserService) Login(ctx context.Context, request LoginRequest) (*LoginRe
 		return nil, fmt.Errorf("token generate: %w", err)
 	}
 
-	const sessionDuration = 7 * 24 * time.Hour
+	csrfToken, _, err := session.GenerateToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate CSRF token: %w", err)
+	}
+
 	newSession := session.Session{
 		UserID:    newUser.ID,
 		TokenHash: hashedToken,
-		ExpiresAt: time.Now().UTC().Add(sessionDuration),
+		ExpiresAt: time.Now().UTC().Add(session.Duration),
+		CSRFToken: csrfToken,
 	}
 
 	createdSession, err := s.sessionRepository.Create(ctx, &newSession)
@@ -104,13 +130,7 @@ func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*U
 		return nil, ErrEmailRequired
 	}
 
-	parsedEmail, err := mail.ParseAddress(request.Email)
-
-	if err != nil {
-		return nil, ErrInvalidEmail
-	}
-
-	if parsedEmail.Address != request.Email && parsedEmail.Name != "" {
+	if !validEmail(request.Email) {
 		return nil, ErrInvalidEmail
 	}
 
@@ -118,6 +138,9 @@ func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*U
 		return nil, ErrPasswordRequired
 	}
 
+	if !utf8.ValidString(request.Password) {
+		return nil, ErrPasswordTooShort
+	}
 	symbolCount := utf8.RuneCountInString(request.Password)
 	if symbolCount < 8 {
 		return nil, ErrPasswordTooShort
@@ -149,8 +172,13 @@ func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*U
 }
 
 func (s *UserService) CurrentUser(ctx context.Context, token string) (*User, error) {
+	currentUser, _, err := s.CurrentSession(ctx, token)
+	return currentUser, err
+}
+
+func (s *UserService) CurrentSession(ctx context.Context, token string) (*User, *session.Session, error) {
 	if token == "" {
-		return nil, ErrUnauthorized
+		return nil, nil, ErrUnauthorized
 	}
 
 	newToken := session.HashToken(token)
@@ -159,22 +187,33 @@ func (s *UserService) CurrentUser(ctx context.Context, token string) (*User, err
 
 	if err != nil {
 		if errors.Is(err, session.ErrSessionNotFound) {
-			return nil, ErrUnauthorized
+			return nil, nil, ErrUnauthorized
 		}
-		return nil, fmt.Errorf("current user: %w", err)
+		return nil, nil, fmt.Errorf("current user: %w", err)
+	}
+	if !foundSession.ExpiresAt.After(time.Now()) {
+		return nil, nil, ErrUnauthorized
 	}
 
 	user, err := s.repository.FindByID(ctx, foundSession.UserID)
 
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			return nil, ErrUnauthorized
+			return nil, nil, ErrUnauthorized
 		}
-		return nil, fmt.Errorf("find current user: %w", err)
+		return nil, nil, fmt.Errorf("find current user: %w", err)
 	}
 
-	return user, nil
+	return user, foundSession, nil
 
+}
+
+func validEmail(email string) bool {
+	if len(email) == 0 || len(email) > 254 {
+		return false
+	}
+	parsed, err := mail.ParseAddress(email)
+	return err == nil && parsed.Name == "" && parsed.Address == email && strings.Contains(email, "@")
 }
 
 func (s *UserService) Logout(ctx context.Context, token string) error {

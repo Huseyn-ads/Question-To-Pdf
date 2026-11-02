@@ -1,31 +1,30 @@
 package user
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"qtp/internal/httpx"
+	"qtp/internal/session"
 	"time"
 )
 
 type UserHandler struct {
-	service *UserService
+	service      *UserService
+	cookieSecure bool
 }
 
-func NewUserHandler(us *UserService) *UserHandler {
+func NewUserHandler(us *UserService, cookieSecure bool) *UserHandler {
 	return &UserHandler{
-		service: us,
+		service:      us,
+		cookieSecure: cookieSecure,
 	}
 }
 
 func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid JSON body")
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxAuthBody) {
 		return
 	}
 
@@ -47,7 +46,7 @@ func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Expires:  result.ExpiresAt,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   handler.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -63,10 +62,7 @@ func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "Invalid JSON body")
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxAuthBody) {
 		return
 	}
 
@@ -85,7 +81,7 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, http.StatusConflict, ErrEmailAlreadyExists.Error())
 		default:
 			slog.Error("register user", "error", err)
-			httpx.WriteError(w, http.StatusInternalServerError, "Internal server errror")
+			httpx.WriteError(w, http.StatusInternalServerError, "server error")
 		}
 		return
 	}
@@ -105,7 +101,6 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 		slog.Error("write register response", "error", err)
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, response)
 }
 
 func (handler *UserHandler) Me(
@@ -202,9 +197,21 @@ func (handler *UserHandler) Logout(
 		Expires:  time.Unix(1, 0).UTC(),
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   handler.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	})
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (handler *UserHandler) CSRF(w http.ResponseWriter, r *http.Request) {
+	currentSession, ok := r.Context().Value(authenticatedSessionKey).(*session.Session)
+	if !ok {
+		_ = httpx.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	_ = httpx.WriteJSON(w, http.StatusOK, struct {
+		Token string `json:"csrf_token"`
+	}{Token: currentSession.CSRFToken})
 }

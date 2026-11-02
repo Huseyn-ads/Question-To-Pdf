@@ -1,7 +1,6 @@
 package questionbank
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -95,9 +94,7 @@ func (handler *QuestionBankHandler) Find(w http.ResponseWriter, r *http.Request)
 func (handler *QuestionBankHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateRequest
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "Invalid JSON body")
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxJSONBody) {
 		return
 	}
 
@@ -138,10 +135,7 @@ func (handler *QuestionBankHandler) Create(w http.ResponseWriter, r *http.Reques
 func (handler *QuestionBankHandler) Patch(w http.ResponseWriter, r *http.Request) {
 	var req UpdateRequest
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "Invalid JSON body")
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxJSONBody) {
 		return
 	}
 

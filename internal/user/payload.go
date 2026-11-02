@@ -9,7 +9,7 @@ type LoginRequest struct {
 
 type LoginResult struct {
 	User      *User
-	Token     string
+	Token     string `json:"-"`
 	ExpiresAt time.Time
 }
 

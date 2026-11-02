@@ -2,14 +2,23 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
 	AppName  string
 	HTTP     HTTPConfig
 	Database DatabaseConfig
+	Security SecurityConfig
+}
+
+type SecurityConfig struct {
+	Production   bool
+	PublicOrigin string
+	CookieSecure bool
 }
 
 type HTTPConfig struct {
@@ -31,7 +40,12 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	databasePort, err := portFromEnv("DB_PORT", 8080)
+	security, err := loadSecurity(httpPort)
+	if err != nil {
+		return Config{}, err
+	}
+
+	databasePort, err := portFromEnv("DB_PORT", 5432)
 	if err != nil {
 		return Config{}, err
 	}
@@ -61,7 +75,8 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-			AppName: valueOrDefault("APP_NAME", "Question-To-Quiz"),
+			AppName:  valueOrDefault("APP_NAME", "Question-To-Quiz"),
+			Security: security,
 			HTTP: HTTPConfig{
 				Port: httpPort,
 			},
@@ -77,6 +92,30 @@ func Load() (Config, error) {
 		},
 		nil
 
+}
+
+func loadSecurity(port uint16) (SecurityConfig, error) {
+	env := valueOrDefault("APP_ENV", "development")
+	if env != "development" && env != "test" && env != "production" {
+		return SecurityConfig{}, fmt.Errorf("APP_ENV must be development, test or production")
+	}
+	production := env == "production"
+	origin := strings.TrimRight(os.Getenv("PUBLIC_ORIGIN"), "/")
+	if origin == "" {
+		if production {
+			return SecurityConfig{}, fmt.Errorf("PUBLIC_ORIGIN is required in production")
+		}
+		origin = "http://localhost:" + strconv.Itoa(int(port))
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Hostname() == "" || u.User != nil || u.Path != "" ||
+		u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "http" && u.Scheme != "https") || strings.Contains(u.Host, "*") {
+		return SecurityConfig{}, fmt.Errorf("PUBLIC_ORIGIN must be a single http(s) origin without a path")
+	}
+	if production && u.Scheme != "https" {
+		return SecurityConfig{}, fmt.Errorf("production PUBLIC_ORIGIN must use HTTPS")
+	}
+	return SecurityConfig{Production: production, PublicOrigin: origin, CookieSecure: u.Scheme == "https"}, nil
 }
 
 func requiredEnv(name string) (string, error) {

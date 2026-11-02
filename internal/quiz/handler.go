@@ -1,11 +1,11 @@
 package quiz
 
 import (
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"qtp/internal/httpx"
+	"qtp/internal/questionbank"
 	"qtp/internal/user"
 	"strconv"
 )
@@ -31,10 +31,7 @@ func (handler *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 
 	bankID := r.PathValue("bankID")
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-
-	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "invalid JSON json")
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxJSONBody) {
 		return
 	}
 
@@ -44,13 +41,14 @@ func (handler *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 
 		switch {
 		case errors.Is(err, ErrInvalidQuizID),
+			errors.Is(err, questionbank.ErrInvalidQuestionBankID),
 			errors.Is(err, ErrInvalidQuestionCount),
 			errors.Is(err, ErrNotEnoughtQuestions),
 			errors.Is(err, ErrInvalidTimeLimiter),
 			errors.Is(err, ErrWrongQuizQuestionID),
 			errors.Is(err, ErrEmptyQuestions):
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
-		case errors.Is(err, ErrQuizNotFound):
+		case errors.Is(err, ErrQuizNotFound), errors.Is(err, questionbank.ErrQuestionBankNotFound):
 			httpx.WriteError(w, http.StatusNotFound, err.Error())
 		default:
 			slog.Error("create question", "error", err)
@@ -70,7 +68,7 @@ func (handler *QuizHandler) CreateQuiz(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:      createdQuiz.CreatedAt,
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, quizResponse)
+	httpx.WriteJSON(w, http.StatusCreated, quizResponse)
 
 }
 
