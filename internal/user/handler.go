@@ -7,18 +7,26 @@ import (
 	"qtp/internal/httpx"
 	"qtp/internal/session"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 type UserHandler struct {
 	service      *UserService
 	cookieSecure bool
+	googleOAuth  *oauth2.Config
 }
 
-func NewUserHandler(us *UserService, cookieSecure bool) *UserHandler {
+func NewUserHandler(us *UserService, cookieSecure bool, googleOAuth *oauth2.Config) *UserHandler {
 	return &UserHandler{
 		service:      us,
 		cookieSecure: cookieSecure,
+		googleOAuth:  googleOAuth,
 	}
+}
+
+func (handler *UserHandler) LoginWithGoogle(w http.ResponseWriter, r *http.Request) {
+
 }
 
 func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +39,10 @@ func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	result, err := handler.service.Login(r.Context(), req)
 
 	if err != nil {
+		if errors.Is(err, ErrEmailNotVerified) {
+			httpx.WriteError(w, http.StatusForbidden, ErrEmailNotVerified.Error())
+			return
+		}
 		if errors.Is(err, ErrInvalidCredentials) {
 			httpx.WriteError(w, http.StatusUnauthorized, ErrInvalidCredentials.Error())
 			return
@@ -51,10 +63,11 @@ func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 
 	httpx.WriteJSON(w, http.StatusOK, UserResponse{
-		ID:        result.User.ID,
-		Email:     result.User.Email,
-		Name:      result.User.Name,
-		CreatedAt: result.User.CreatedAt,
+		ID:              result.User.ID,
+		Email:           result.User.Email,
+		Name:            result.User.Name,
+		CreatedAt:       result.User.CreatedAt,
+		EmailVerifiedAt: result.User.EmailVerifiedAt,
 	})
 
 }
@@ -66,7 +79,7 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	createdUser, err := handler.service.Register(r.Context(), req)
+	result, err := handler.service.Register(r.Context(), req)
 
 	if err != nil {
 		switch {
@@ -86,11 +99,16 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := UserResponse{
-		ID:        createdUser.ID,
-		Email:     createdUser.Email,
-		Name:      createdUser.Name,
-		CreatedAt: createdUser.CreatedAt,
+	response := RegisterResponse{
+		UserResponse: UserResponse{
+			ID:              result.User.ID,
+			Email:           result.User.Email,
+			Name:            result.User.Name,
+			CreatedAt:       result.User.CreatedAt,
+			EmailVerifiedAt: result.User.EmailVerifiedAt,
+		},
+		VerificationRequired:  true,
+		VerificationEmailSent: result.VerificationEmailSent,
 	}
 
 	if err := httpx.WriteJSON(
@@ -125,10 +143,11 @@ func (handler *UserHandler) Me(
 	}
 
 	response := UserResponse{
-		ID:        currentUser.ID,
-		Email:     currentUser.Email,
-		Name:      currentUser.Name,
-		CreatedAt: currentUser.CreatedAt,
+		ID:              currentUser.ID,
+		Email:           currentUser.Email,
+		Name:            currentUser.Name,
+		CreatedAt:       currentUser.CreatedAt,
+		EmailVerifiedAt: currentUser.EmailVerifiedAt,
 	}
 
 	if err := httpx.WriteJSON(
@@ -214,4 +233,41 @@ func (handler *UserHandler) CSRF(w http.ResponseWriter, r *http.Request) {
 	_ = httpx.WriteJSON(w, http.StatusOK, struct {
 		Token string `json:"csrf_token"`
 	}{Token: currentSession.CSRFToken})
+}
+
+func (handler *UserHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req VerifyEmailRequest
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxAuthBody) {
+		return
+	}
+	if err := handler.service.VerifyEmail(r.Context(), req.Token); err != nil {
+		if errors.Is(err, ErrInvalidVerificationToken) {
+			httpx.WriteError(w, http.StatusBadRequest, ErrInvalidVerificationToken.Error())
+			return
+		}
+		slog.Error("verify email failed")
+		httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, MessageResponse{Message: "email verified; you can now log in"})
+}
+
+func (handler *UserHandler) ResendVerification(w http.ResponseWriter, r *http.Request) {
+	var req ResendVerificationRequest
+	if !httpx.ReadJSON(w, r, &req, httpx.MaxAuthBody) {
+		return
+	}
+	if err := handler.service.ResendVerification(r.Context(), req.Email); err != nil {
+		if errors.Is(err, ErrInvalidEmail) {
+			httpx.WriteError(w, http.StatusBadRequest, ErrInvalidEmail.Error())
+			return
+		}
+		slog.Error("resend verification failed")
+		httpx.WriteError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	// Same response for absent, verified, throttled and pending accounts.
+	httpx.WriteJSON(w, http.StatusAccepted, MessageResponse{
+		Message: "if verification is needed, an email will be sent; please wait before trying again",
+	})
 }

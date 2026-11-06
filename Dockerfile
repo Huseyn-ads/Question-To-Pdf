@@ -18,6 +18,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 FROM alpine:3.22
 
+RUN apk add --no-cache ca-certificates
+
 RUN addgroup -S app && adduser -S app -G app
 
 WORKDIR /app

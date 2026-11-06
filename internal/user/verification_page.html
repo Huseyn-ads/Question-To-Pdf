@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Подтверждение email</title>
+</head>
+<body>
+  <main>
+    <h1>Подтверждение email</h1>
+    <p id="status" role="status">Нажмите кнопку, чтобы подтвердить регистрацию в Question-To-Quiz.</p>
+    <button id="confirm" type="button" disabled>Подтвердить email</button>
+    <noscript>Включите JavaScript для подтверждения email.</noscript>
+  </main>
+  <script nonce="{{.Nonce}}">
+    let token = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
+    history.replaceState(null, "", window.location.pathname);
+    const button = document.getElementById("confirm");
+    const status = document.getElementById("status");
+    if (token) {
+      button.disabled = false;
+    } else {
+      status.textContent = "В ссылке нет кода подтверждения. Откройте ссылку из письма.";
+    }
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      status.textContent = "Подтверждаем email…";
+      try {
+        const response = await fetch("/v1/auth/verify-email", {
+          method: "POST",
+          credentials: "omit",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({token})
+        });
+        if (response.ok) {
+          token = "";
+          status.textContent = "Email подтверждён. Теперь можно войти в Question-To-Quiz.";
+          button.hidden = true;
+        } else if (response.status === 400) {
+          token = "";
+          status.textContent = "Ссылка недействительна, уже использована или истекла. Запросите новое письмо на странице входа.";
+        } else {
+          status.textContent = "Не удалось подтвердить email. Попробуйте ещё раз.";
+          button.disabled = false;
+        }
+      } catch {
+        status.textContent = "Нет связи с сервером. Попробуйте ещё раз.";
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

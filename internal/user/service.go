@@ -17,10 +17,14 @@ import (
 type UserService struct {
 	repository        userStore
 	sessionRepository sessionStore
+	mailer            VerificationMailer
+	publicOrigin      string
 }
 
 type userStore interface {
-	Create(context.Context, *User) (*User, error)
+	CreateWithVerification(context.Context, *User, *EmailVerificationToken) (*User, error)
+	IssueVerification(context.Context, string, *EmailVerificationToken) (*User, error)
+	ConfirmEmail(context.Context, []byte) error
 	FindByEmail(context.Context, string) (*User, error)
 	FindByID(context.Context, string) (*User, error)
 }
@@ -39,10 +43,12 @@ var dummyPasswordHash = func() []byte {
 	return hash
 }()
 
-func NewUserService(ur userStore, sr sessionStore) *UserService {
+func NewUserService(ur userStore, sr sessionStore, mailer VerificationMailer, publicOrigin string) *UserService {
 	return &UserService{
 		repository:        ur,
 		sessionRepository: sr,
+		mailer:            mailer,
+		publicOrigin:      strings.TrimRight(publicOrigin, "/"),
 	}
 }
 
@@ -87,6 +93,11 @@ func (s *UserService) Login(ctx context.Context, request LoginRequest) (*LoginRe
 		return nil, fmt.Errorf("authenticate user: %w", err)
 	}
 
+	// Check after password verification so a wrong password still returns 401.
+	if newUser.EmailVerifiedAt == nil {
+		return nil, ErrEmailNotVerified
+	}
+
 	token, hashedToken, err := session.GenerateToken()
 
 	if err != nil {
@@ -118,7 +129,7 @@ func (s *UserService) Login(ctx context.Context, request LoginRequest) (*LoginRe
 	}, nil
 }
 
-func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*User, error) {
+func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*RegisterResult, error) {
 	request.Email = strings.ToLower(strings.TrimSpace(request.Email))
 	request.Name = strings.TrimSpace(request.Name)
 
@@ -162,13 +173,20 @@ func (s *UserService) Register(ctx context.Context, request RegisterRequest) (*U
 		PasswordHash: string(hashedPassword),
 	}
 
-	createdUser, err := s.repository.Create(ctx, newUser)
+	raw, verification, err := newVerificationToken()
+	if err != nil {
+		return nil, fmt.Errorf("generate email verification token: %w", err)
+	}
+	createdUser, err := s.repository.CreateWithVerification(ctx, newUser, verification)
 
 	if err != nil {
 		return nil, fmt.Errorf("register user: %w", err)
 	}
 
-	return createdUser, nil
+	// User and token are committed before SMTP. A delivery failure does not
+	// delete the account; the client can explicitly request another email.
+	sent := s.sendVerification(ctx, createdUser, raw, verification.ExpiresAt)
+	return &RegisterResult{User: createdUser, VerificationEmailSent: sent}, nil
 }
 
 func (s *UserService) CurrentUser(ctx context.Context, token string) (*User, error) {
@@ -204,6 +222,9 @@ func (s *UserService) CurrentSession(ctx context.Context, token string) (*User, 
 		return nil, nil, fmt.Errorf("find current user: %w", err)
 	}
 
+	if user.EmailVerifiedAt == nil {
+		return nil, nil, ErrUnauthorized
+	}
 	return user, foundSession, nil
 
 }
@@ -214,6 +235,10 @@ func validEmail(email string) bool {
 	}
 	parsed, err := mail.ParseAddress(email)
 	return err == nil && parsed.Name == "" && parsed.Address == email && strings.Contains(email, "@")
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func (s *UserService) Logout(ctx context.Context, token string) error {

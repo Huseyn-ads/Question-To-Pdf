@@ -9,29 +9,77 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	"qtp/internal/httpx"
 	"qtp/internal/session"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type memoryUsers struct {
+	mu      sync.Mutex
 	user    *User
 	err     error
 	email   string
 	creates int
+	token   *EmailVerificationToken
+	issues  int
 }
 
-func (s *memoryUsers) Create(_ context.Context, u *User) (*User, error) {
+func (s *memoryUsers) CreateWithVerification(_ context.Context, u *User, token *EmailVerificationToken) (*User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.creates++
 	if s.err != nil {
 		return nil, s.err
 	}
 	u.ID = "user-id"
 	s.user = u
+	token.UserID = u.ID
+	token.CreatedAt = time.Now()
+	token.ExpiresAt = token.CreatedAt.Add(VerificationLifetime)
+	s.token = token
+	s.issues++
 	return u, nil
+}
+
+func (s *memoryUsers) IssueVerification(_ context.Context, email string, token *EmailVerificationToken) (*User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.user == nil || s.user.Email != email || s.user.EmailVerifiedAt != nil {
+		return nil, ErrVerificationNotPending
+	}
+	if s.token != nil && (time.Since(s.token.CreatedAt) < time.Minute || s.issues >= 5) {
+		return nil, ErrVerificationThrottled
+	}
+	token.UserID = s.user.ID
+	token.CreatedAt = time.Now()
+	token.ExpiresAt = token.CreatedAt.Add(VerificationLifetime)
+	s.token = token
+	s.issues++
+	return s.user, nil
+}
+
+func (s *memoryUsers) ConfirmEmail(_ context.Context, hash []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return s.err
+	}
+	if s.token == nil || !bytes.Equal(hash, s.token.TokenHash) || s.token.UsedAt != nil ||
+		!time.Now().Before(s.token.ExpiresAt) || s.user.EmailVerifiedAt != nil {
+		return ErrInvalidVerificationToken
+	}
+	now := time.Now()
+	s.token.UsedAt = &now
+	s.user.EmailVerifiedAt = &now
+	return nil
 }
 func (s *memoryUsers) FindByEmail(_ context.Context, email string) (*User, error) {
 	s.email = email
@@ -108,7 +156,7 @@ func TestLoginMissingWrongPasswordAndDatabaseFailure(t *testing.T) {
 		{"database failure", &memoryUsers{err: errors.New("postgres internal path /private/password")}, 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewUserHandler(NewUserService(tc.store, &memorySessions{}), true)
+			h := NewUserHandler(NewUserService(tc.store, &memorySessions{}, &captureMailer{}, "https://quiz.test"), true, nil)
 			w := httptest.NewRecorder()
 			h.Login(w, jsonRequest("POST", "/v1/auth/login", `{"email":"student@example.com","password":"wrong-password"}`))
 			if w.Code != tc.status {
@@ -135,7 +183,7 @@ func TestRegisterValidationAndSingleJSONResponse(t *testing.T) {
 		{strings.Repeat("я", 7), ErrPasswordTooShort},
 		{strings.Repeat("я", 37), ErrPasswordTooLong},
 	} {
-		s := NewUserService(&memoryUsers{}, &memorySessions{})
+		s := NewUserService(&memoryUsers{}, &memorySessions{}, &captureMailer{}, "https://quiz.test")
 		_, err := s.Register(context.Background(), RegisterRequest{Email: "student@example.com", Name: "Student", Password: tc.password})
 		if !errors.Is(err, tc.expected) {
 			t.Fatal(err)
@@ -147,7 +195,7 @@ func TestRegisterValidationAndSingleJSONResponse(t *testing.T) {
 		}
 	}
 	u := &memoryUsers{}
-	h := NewUserHandler(NewUserService(u, &memorySessions{}), false)
+	h := NewUserHandler(NewUserService(u, &memorySessions{}, &captureMailer{}, "https://quiz.test"), false, nil)
 	w := httptest.NewRecorder()
 	h.Register(w, jsonRequest("POST", "/v1/auth/register", `{"email":"  Student@Example.COM  ","name":" Student ","password":"password123"}`))
 	if w.Code != 201 || u.creates != 1 || u.user.Email != "student@example.com" {
@@ -176,10 +224,11 @@ func mustJSON(t *testing.T, v any) []byte {
 }
 
 func TestSessionCSRFAndLogoutLifecycle(t *testing.T) {
-	users := &memoryUsers{user: &User{ID: "user-id", Email: "student@example.com", PasswordHash: string(dummyPasswordHash)}}
+	verifiedAt := time.Now()
+	users := &memoryUsers{user: &User{ID: "user-id", Email: "student@example.com", PasswordHash: string(dummyPasswordHash), EmailVerifiedAt: &verifiedAt}}
 	sessions := &memorySessions{}
-	service := NewUserService(users, sessions)
-	h := NewUserHandler(service, true)
+	service := NewUserService(users, sessions, &captureMailer{}, "https://quiz.test")
+	h := NewUserHandler(service, true, nil)
 	router := http.NewServeMux()
 	router.HandleFunc("POST /v1/auth/login", h.Login)
 	router.Handle("GET /v1/auth/csrf", h.RequireAuth(http.HandlerFunc(h.CSRF)))

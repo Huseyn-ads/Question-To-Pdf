@@ -13,6 +13,7 @@ type Config struct {
 	HTTP     HTTPConfig
 	Database DatabaseConfig
 	Security SecurityConfig
+	Mail     MailConfig
 }
 
 type SecurityConfig struct {
@@ -41,6 +42,11 @@ func Load() (Config, error) {
 	}
 
 	security, err := loadSecurity(httpPort)
+	if err != nil {
+		return Config{}, err
+	}
+
+	mail, err := loadMail(security.Production)
 	if err != nil {
 		return Config{}, err
 	}
@@ -77,6 +83,7 @@ func Load() (Config, error) {
 	return Config{
 			AppName:  valueOrDefault("APP_NAME", "Question-To-Quiz"),
 			Security: security,
+			Mail:     mail,
 			HTTP: HTTPConfig{
 				Port: httpPort,
 			},

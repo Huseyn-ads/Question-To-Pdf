@@ -1,105 +1,1040 @@
-# HTTP и безопасность
+# API-контракт Question-To-Quiz v1
 
-## Среда и cookies
+Этот файл — основной контракт между backend и frontend для первой версии.
+Он описывает фактические HTTP-маршруты, JSON-поля, авторизацию, CSRF,
+таймер попытки и поведение повторных запросов.
 
-MVP использует один origin: frontend и API на одном HTTPS-домене,
-frontend обращается к `/v1/...`. Локально используйте dev proxy `/v1`
-на backend и задайте `PUBLIC_ORIGIN` равным origin страницы frontend.
-По умолчанию это `http://localhost:8080`. `localhost` и `127.0.0.1`
-считаются разными origins. Не определяйте доверенный origin по Host,
-X-Forwarded-Host или X-Forwarded-Proto из запроса.
+## Быстрый старт frontend
 
-В production нужны `APP_ENV=production` и явный
-`PUBLIC_ORIGIN=https://ваш-домен`. При HTTP-origin production не запустится.
-HTTPS завершается на reverse proxy; прямой публичный доступ к HTTP-порту
-backend должен быть закрыт. Proxy должен сам ограничивать запросы и соединения.
+1. Использовать тот же origin, что и API, и обращаться к `/v1/...`.
+   Для нового аккаунта: Register → письмо → подтверждение email → Login.
+2. Выполнить `POST /v1/auth/login`. Браузер сохранит HttpOnly cookie `session`.
+3. Выполнить `GET /v1/auth/csrf` и сохранить `csrf_token` только в памяти.
+4. Для каждого защищённого `POST`, `PUT`, `PATCH` и `DELETE` отправлять
+   `X-CSRF-Token` и cookie сессии.
+5. При `401` очистить локальное состояние пользователя и открыть login.
+6. При `403` login с `email verification required` показать экран подтверждения
+   email и кнопку resend. На других маршрутах проверить CSRF token и origin.
+7. Для восстановления экрана попытки использовать `GET /v1/attempts/{attemptID}`.
 
-Cookie `session`: `Path=/`, без Domain, HttpOnly, SameSite=Lax,
-Secure для HTTPS-origin. Серверная сессия и Expires cookie действуют 7 суток.
-Сервер принимает только неистёкшие сессии. В PostgreSQL хранится SHA-256
-session token; исходный token существует только в cookie клиента.
-Пароли хешируются bcrypt. Минимум — 8 Unicode-кодовых точек, максимум —
-72 байта UTF-8. Email очищается от пробелов по краям и приводится к нижнему регистру.
+Готовая коллекция: [Question-To-Quiz.insomnia.json](insomnia/Question-To-Quiz.insomnia.json).
 
-## CSRF-контракт
+## Общие соглашения
 
-1. `POST /v1/auth/login` с JSON email/password создаёт сессию и cookie.
-   `POST /v1/auth/register` создаёт пользователя (201), затем нужен login.
-   Для обоих запросов сервер требует точный `Origin: PUBLIC_ORIGIN`.
-   Если Origin отсутствует, проверяется origin из Referer. Отсутствие обоих,
-   `Origin: null`, посторонний origin или Sec-Fetch-Site=cross-site дают 403.
-2. После login вызвать `GET /v1/auth/csrf` с cookie. Ответ:
-   `{"csrf_token":"..."}`. Без сессии — 401. Ответы не кешируются.
-3. Все POST/PUT/PATCH/DELETE защищённых маршрутов, включая multipart preview
-   и logout, требуют заголовок `X-CSRF-Token` и доверенный Origin/Referer.
-   Токен сравнивается с отдельным случайным csrf_token этой сессии,
-   а не с session token. Токен другой сессии, пустой или неправильный — 403.
-4. Хранить csrf_token в памяти frontend; после reload получать его заново.
-   После каждого login получать новый token; после logout удалять token из памяти.
-   При 401 сначала login, затем получение token; не повторять изменяющий запрос
-   автоматически. При logout нужны действующая сессия и CSRF token;
-   сервер удаляет запись сессии и очищает cookie с теми же именем и Path,
-   возвращает 204 без тела. Повторный logout без сессии возвращает 401.
+### URL, JSON и идентификаторы
 
-Для fetch достаточно `credentials: 'same-origin'` (значение по умолчанию).
-Для Postman/curl тоже передавайте явный доверенный Origin, cookie и CSRF token.
-Выполните новую миграцию `20261102120000_add_session_csrf_token.sql`
-перед запуском обновлённого приложения. Старые сессии получают отдельный token.
+- Основной API prefix: `/v1`.
+- Локальный пример base URL: `http://localhost:8080`.
+- JSON-поля используют `snake_case`.
+- Идентификаторы ресурсов — UUID, передаваемые JSON-строками.
+- JSON-запрос должен иметь `Content-Type: application/json`.
+- Сервер принимает ровно один JSON-объект. Неизвестные поля, массив вместо
+  объекта и второй JSON-объект дают ошибку.
+- Создание возвращает `201 Created`.
+- Успешное удаление и logout возвращают `204 No Content` без тела.
+- Ответы JSON имеют `Content-Type: application/json; charset=utf-8`.
 
-Отдельный origin frontend в этой версии не поддерживается: Access-Control-Allow-*
-не выставляются, cross-origin preflight отклоняется. CORS не заменяет CSRF.
-SameSite используется дополнительно к проверке token и Origin.
+Примеры используют вымышленные UUID и данные:
 
-## Тела, ошибки и лимиты
+| Переменная | Пример |
+| --- | --- |
+| `bankID` | `22222222-2222-4222-8222-222222222222` |
+| `questionID` | `33333333-3333-4333-8333-333333333333` |
+| `quizID` | `66666666-6666-4666-8666-666666666666` |
+| `quizQuestionID` | `77777777-7777-4777-8777-777777777777` |
+| `optionID` | `88888888-8888-4888-8888-888888888888` |
+| `attemptID` | `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa` |
 
-JSON: Content-Type application/json; ровно один объект, неизвестные поля
-и второй объект/значение запрещены. Ошибка формата — 400, неподдерживаемый
-Content-Type — 415, превышение лимита — 413.
+### Время и серверный таймер
+
+Время передаётся по ISO 8601/RFC 3339 с UTC или явным offset, например
+`2026-11-02T12:00:00Z`.
+
+`deadline_at: null` означает, что у попытки нет таймера. При создании quiz
+`time_limit_minutes: 0` создаёт такие попытки. Положительное значение от 1
+до 180 задаёт лимит в минутах.
+
+Источник истины — серверное время. У подробной попытки есть `server_time`.
+Frontend вычисляет оставшееся время как `deadline_at - server_time`, а затем
+уменьшает его локально для отображения. Reload и перезапуск backend не меняют
+`started_at` или `deadline_at`.
+
+Граница истечения едина: при `server_time >= deadline_at` попытка просрочена.
+После этого `SaveAnswer` возвращает `409`, даже если в БД статус ещё не был
+обновлён отдельным фоновым процессом. Фоновый timer или cron не требуется.
+
+`finished_at` — сохранённое сервером время закрытия попытки. Frontend не
+вычисляет его из `started_at` и `deadline_at`.
+
+### Сессия, Origin и CSRF
+
+Backend использует cookie `session` с `Path=/`, `HttpOnly`, `SameSite=Lax`
+и `Secure=true` в production HTTPS. Session token не возвращается в JSON.
+
+`POST /v1/auth/register`, `POST /v1/auth/login`,
+`POST /v1/auth/verify-email` и `POST /v1/auth/resend-verification` не требуют login или
+`X-CSRF-Token`, но, как и все изменяющие запросы, требуют точный
+`Origin: PUBLIC_ORIGIN` либо доверенный `Referer`.
+
+После login frontend вызывает `GET /v1/auth/csrf`:
+
+~~~json
+{
+  "csrf_token": "<csrf-token>"
+}
+~~~
+
+Все защищённые `POST`, `PUT`, `PATCH` и `DELETE` требуют:
+
+~~~http
+Origin: http://localhost:8080
+X-CSRF-Token: <csrf-token>
+~~~
+
+CSRF token связан с конкретной сессией и не является session token. Его следует
+держать в памяти, получать заново после reload/login и удалять после logout.
+Safe-методы `GET` и `HEAD` не требуют заголовок `X-CSRF-Token`.
+
+Frontend и API в MVP работают на одном origin. Backend не выдаёт permissive
+CORS headers и отклоняет посторонний origin.
+
+### Ошибки
+
+Все прикладные ошибки имеют одну форму:
+
+~~~json
+{
+  "error": "понятное сообщение"
+}
+~~~
+
+Общие статусы:
+
+| Status | Значение для frontend |
+| --- | --- |
+| `400` | Неверный UUID, query parameter, JSON или проверка полей |
+| `401` | Нет действующей сессии; отправить пользователя на login |
+| `403` | Неверный CSRF/origin; при login — также неподтверждённый email |
+| `404` | Ресурс не существует или принадлежит другому пользователю |
+| `405` | Метод не поддерживается; сервер также возвращает `Allow` |
+| `409` | Конфликт состояния, например попытка закрыта |
+| `413` | Тело или файл превышает лимит |
+| `415` | Неверный `Content-Type` или не DOCX |
+| `422` | DOCX повреждён или содержит неподдерживаемые formula/media |
+| `429` | Rate limit/capacity; учитывать `Retry-After`, если он есть |
+| `500` | Безопасное `server error`, без SQL, пароля и пути сервера |
+| `503` | `/ready`: PostgreSQL временно недоступен |
+
+### Владение ресурсами
+
+Пользователь видит и изменяет только свои банки, questions, quizzes и attempts.
+Отсутствующий и чужой ресурс намеренно дают одинаковый `404`. Frontend не должен
+делать вывод о существовании чужого UUID.
+
+### Списки и пагинация
+
+Новые пагинированные списки используют:
+
+~~~json
+{
+  "items": [],
+  "limit": 20,
+  "offset": 0
+}
+~~~
+
+`limit` по умолчанию 20, допустим от 1 до 100. `offset` по умолчанию 0 и не
+может быть отрицательным. Поля `total` пока нет; последняя страница определяется
+по `items.length < limit`.
+
+`GET /v1/quizzes` и `GET /v1/quizzes/{quizID}/attempts` сортируются стабильно:
+сначала новые записи, затем UUID. Старые непагинированные списки банков и
+вопросов возвращают JSON-массив напрямую.
+
+### Полный quiz, метаданные и правильность
+
+- `POST /v1/question-banks/{bankID}/quizzes` возвращает только метаданные
+  созданного quiz.
+- `GET /v1/quizzes` возвращает только метаданные.
+- `GET /v1/quizzes/{quizID}` возвращает полный snapshot вопросов и вариантов,
+  но не возвращает `is_correct`.
+- `GET /v1/attempts/{attemptID}` возвращает полный snapshot и выбранные ID,
+  но не раскрывает правильность.
+- Авторские `is_correct` и итог по каждому вопросу доступны только из
+  `POST /v1/attempts/{attemptID}/finish` и
+  `GET /v1/attempts/{attemptID}/result` после закрытия.
+
+Quiz хранит копии вопросов и вариантов. Изменение исходного банка после создания
+quiz не меняет его состав или результат попытки.
+
+## Карта маршрутов
+
+| Method и path | Login | CSRF | Назначение |
+| --- | --- | --- | --- |
+| `POST /v1/auth/register` | нет | нет, нужен Origin | Регистрация |
+| `GET /v1/auth/verify-email` | нет | нет | Страница подтверждения (HTML) |
+| `POST /v1/auth/verify-email` | нет | нет, нужен Origin | Подтвердить email по token |
+| `POST /v1/auth/resend-verification` | нет | нет, нужен Origin | Повторное письмо |
+| `POST /v1/auth/login` | нет | нет, нужен Origin | Login и session cookie |
+| `GET /v1/auth/me` | да | нет | Текущий пользователь |
+| `GET /v1/auth/csrf` | да | нет | CSRF token сессии |
+| `POST /v1/auth/logout` | да | да | Удалить сессию |
+| `GET /v1/question-banks` | да | нет | Список банков |
+| `POST /v1/question-banks` | да | да | Создать банк |
+| `GET /v1/question-banks/{bankID}` | да | нет | Получить банк |
+| `PATCH /v1/question-banks/{bankID}` | да | да | Изменить банк |
+| `DELETE /v1/question-banks/{bankID}` | да | да | Удалить банк |
+| `GET /v1/question-banks/{bankID}/questions` | да | нет | Вопросы банка |
+| `POST /v1/question-banks/{bankID}/questions` | да | да | Создать вопрос |
+| `GET /v1/question-banks/{bankID}/questions/{questionID}` | да | нет | Получить вопрос |
+| `PUT /v1/question-banks/{bankID}/questions/{questionID}` | да | да | Полностью заменить вопрос |
+| `DELETE /v1/question-banks/{bankID}/questions/{questionID}` | да | да | Удалить вопрос |
+| `POST /v1/question-banks/{bankID}/imports/preview` | да | да | Preview DOCX |
+| `POST /v1/question-banks/{bankID}/imports` | да | да | Подтвердить import |
+| `POST /v1/question-banks/{bankID}/quizzes` | да | да | Создать quiz snapshot |
+| `GET /v1/quizzes` | да | нет | Список quizzes |
+| `GET /v1/quizzes/{quizID}` | да | нет | Полный quiz snapshot |
+| `DELETE /v1/quizzes/{quizID}` | да | да | Удалить quiz |
+| `POST /v1/quizzes/{quizID}/attempts` | да | да | Начать/восстановить попытку |
+| `GET /v1/quizzes/{quizID}/attempts` | да | нет | История попыток |
+| `GET /v1/attempts/{attemptID}` | да | нет | Восстановить экран попытки |
+| `PUT /v1/attempts/{attemptID}/answers/{quizQuestionID}` | да | да | Сохранить выбор |
+| `POST /v1/attempts/{attemptID}/finish` | да | да | Закрыть попытку |
+| `GET /v1/attempts/{attemptID}/result` | да | нет | Получить результат |
+| `GET /health` | нет | нет | Liveness |
+| `GET /ready` | нет | нет | Readiness PostgreSQL |
+
+## Auth
+
+### POST /v1/auth/register
+
+Login: нет. CSRF: нет, но доверенный `Origin` обязателен. Path/query: нет.
+
+Body, JSON до 16 KiB:
+
+~~~json
+{
+  "email": "student@example.com",
+  "name": "Demo Student",
+  "password": "<enter-a-local-test-password>"
+}
+~~~
+
+Email нормализуется в lowercase. Имя обязательно. Пароль: минимум 8 Unicode
+символов и максимум 72 байта UTF-8.
+
+Успех `201`:
+
+~~~json
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "email": "student@example.com",
+  "name": "Demo Student",
+  "created_at": "2026-11-04T10:00:00Z",
+  "email_verified_at": null,
+  "verification_required": true,
+  "verification_email_sent": true
+}
+~~~
+
+Ошибки: `400` validation/JSON, `409` email уже занят, `413`, `415`, `429`, `500`.
+Регистрация не создаёт session cookie. Повтор с тем же email возвращает `409`.
+В одной транзакции создаются аккаунт и hash одноразового token. Письмо отправляется
+после commit. `verification_email_sent: true` означает, что SMTP relay принял письмо,
+а не гарантирует его появление во входящих.
+При сбое SMTP аккаунт остаётся созданным, ответ `201` содержит
+`verification_email_sent: false`. Нужно показать кнопку повторной отправки;
+повторять Register для этого не нужно.
+
+### GET /v1/auth/verify-email
+
+Login/CSRF: нет. Body/path/query: нет. Это HTML, не JSON API.
+
+Письмо содержит ссылку:
+
+~~~text
+http://localhost:8080/v1/auth/verify-email#token=<one-time-token>
+~~~
+
+Фрагмент `#token=...` не отправляется HTTP-серверу в URL. Страница читает его,
+убирает из адресной строки и показывает кнопку «Подтвердить email».
+Только нажатие кнопки отправляет POST ниже. Простое открытие ссылки, включая
+предпросмотр письма сканером, не подтверждает аккаунт и не расходует token.
+Успех `200 text/html`; повторное открытие страницы безопасно.
+Страница доступна до создания frontend, работает с текущим `PUBLIC_ORIGIN`.
+
+### POST /v1/auth/verify-email
+
+Login: нет. Session CSRF: нет, но доверенный `Origin` обязателен.
+Path/query: нет. JSON до 16 KiB:
+
+~~~json
+{"token":"<one-time-token-from-email>"}
+~~~
+
+Успех `200`:
+
+~~~json
+{"message":"email verified; you can now log in"}
+~~~
+
+Token случайный, 32 байта, base64url, хранится в БД только как SHA-256 hash.
+Срок — 24 часа от выдачи. Подтверждение и расходование token атомарны.
+Неверная, истёкшая, заменённая и уже использованная ссылка дают одинаковый
+`400` с `verification link is invalid or expired`.
+Вторая попытка подтверждения возвращает `400`, но аккаунт остаётся подтверждённым.
+Остальные ошибки: `403` Origin, `413`, `415`, `429`, `500`.
+Подтверждение не создаёт сессию; затем пользователь выполняет Login.
+
+### POST /v1/auth/resend-verification
+
+Login: нет. Session CSRF: нет, но доверенный `Origin` обязателен.
+Path/query: нет. JSON до 16 KiB:
+
+~~~json
+{"email":"student@example.com"}
+~~~
+
+Ответ `202`:
+
+~~~json
+{"message":"if verification is needed, an email will be sent; please wait before trying again"}
+~~~
+
+Одинаковый статус и текст возвращаются для отсутствующего, уже подтверждённого,
+ожидающего подтверждения аккаунта и при достижении лимита на email. Этот ответ
+также не гарантирует доставку письма; синхронная отправка может влиять на время ответа.
+При фактической новой выдаче старая ссылка становится недействительной.
+Cooldown — 60 секунд, максимум 5 выдач в час на аккаунт, включая Register.
+Эти ограничения хранятся в PostgreSQL и переживают restart. Ошибки:
+`400` invalid email/JSON, `403` Origin, `413`, `415`,
+`429` общий лимит на IP, `500` ошибка хранилища.
+
+### POST /v1/auth/login
+
+Login: нет. CSRF: нет, но доверенный `Origin` обязателен. Path/query: нет.
+
+~~~json
+{
+  "email": "student@example.com",
+  "password": "<enter-a-local-test-password>"
+}
+~~~
+
+Успех `200` устанавливает HttpOnly cookie `session` и возвращает User:
+
+~~~json
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "email": "student@example.com",
+  "name": "Demo Student",
+  "created_at": "2026-11-04T10:00:00Z",
+  "email_verified_at": "2026-11-04T10:05:00Z"
+}
+~~~
+
+Session token в теле отсутствует.
+
+Ошибки: `400` JSON, `401` одинаково для неизвестного email и неверного пароля,
+`403` для правильного пароля при неподтверждённом email, `413`, `415`,
+`429`, `500`. Проверка подтверждения идёт после проверки пароля.
+Каждый успешный login создаёт новую сессию и новый
+CSRF token; повторный login не возвращает старый token.
+
+### GET /v1/auth/me
+
+Login: да. CSRF: нет. Body/path/query: нет.
+
+~~~http
+GET /v1/auth/me
+~~~
+
+Успех `200` — User JSON из Login. Ошибки: `401`, `500`. Запрос безопасно
+повторять.
+
+### GET /v1/auth/csrf
+
+Login: да. CSRF: нет. Body/path/query: нет.
+
+Успех `200`:
+
+~~~json
+{
+  "csrf_token": "<csrf-token>"
+}
+~~~
+
+Ошибки: `401`, `500`. Ответ имеет `Cache-Control: no-store`. Запрос можно
+повторять; в рамках одной сессии возвращается тот же token.
+
+### POST /v1/auth/logout
+
+Login: да. CSRF: да. Body/path/query: нет.
+
+~~~http
+POST /v1/auth/logout
+Origin: http://localhost:8080
+X-CSRF-Token: <csrf-token>
+~~~
+
+Успех `204`, тело отсутствует. Сервер удаляет сессию и очищает cookie.
+Ошибки: `401`, `403`, `500`. Повтор после успешного logout возвращает `401`.
+
+## Банки вопросов
+
+Объект банка:
+
+~~~json
+{
+  "id": "22222222-2222-4222-8222-222222222222",
+  "title": "История",
+  "description": "Вопросы к экзамену",
+  "created_at": "2026-11-02T10:05:00Z",
+  "updated_at": "2026-11-02T10:05:00Z"
+}
+~~~
+
+### GET /v1/question-banks
+
+Login: да. CSRF: нет. Body/path/query: нет.
+
+~~~http
+GET /v1/question-banks
+~~~
+
+Успех `200` — непагинированный массив объектов банка, `[]` если банков нет.
+Ошибки: `401`, `500`. Запрос безопасно повторять.
+
+### POST /v1/question-banks
+
+Login: да. CSRF: да. Path/query: нет. JSON до 1 MiB:
+
+~~~json
+{
+  "title": "История",
+  "description": "Вопросы к экзамену"
+}
+~~~
+
+Успех `201` — объект банка. `title` обязателен, после trim не длиннее 150
+Unicode символов. Ошибки: `400`, `401`, `403`, `413`, `415`, `500`.
+Idempotency key нет: повтор создаёт ещё один банк.
+
+### GET /v1/question-banks/{bankID}
+
+Login: да. CSRF: нет. `bankID` — UUID.
+
+~~~http
+GET /v1/question-banks/22222222-2222-4222-8222-222222222222
+~~~
+
+Успех `200` — объект банка. Ошибки: `400` UUID, `401`, `404`, `500`.
+Запрос безопасно повторять.
+
+### PATCH /v1/question-banks/{bankID}
+
+Login: да. CSRF: да. `bankID` — UUID. JSON до 1 MiB. Нужен хотя бы один ключ:
+
+~~~json
+{
+  "description": "Обновлённое описание"
+}
+~~~
+
+`title` и `description` заменяются целиком. `null` не считается новым значением.
+Успех `200` — обновлённый объект банка. Ошибки: `400`, `401`, `403`, `404`,
+`413`, `415`, `500`. Повтор одного payload приводит к тому же содержимому,
+но `updated_at` может измениться.
+
+### DELETE /v1/question-banks/{bankID}
+
+Login: да. CSRF: да. `bankID` — UUID. Body/query: нет.
+
+Успех `204`, тело отсутствует. Ошибки: `400`, `401`, `403`, `404`, `500`.
+Удаление каскадно удаляет связанные данные. Повтор возвращает `404`.
+
+## Вопросы банка
+
+Объект авторского вопроса:
+
+~~~json
+{
+  "id": "33333333-3333-4333-8333-333333333333",
+  "question_bank_id": "22222222-2222-4222-8222-222222222222",
+  "text": "В каком году началась Вторая мировая война?",
+  "options": [
+    {
+      "id": "44444444-4444-4444-8444-444444444444",
+      "text": "1939",
+      "position": 1,
+      "is_correct": true
+    },
+    {
+      "id": "55555555-5555-4555-8555-555555555555",
+      "text": "1941",
+      "position": 2,
+      "is_correct": false
+    }
+  ],
+  "created_at": "2026-11-02T10:10:00Z",
+  "updated_at": "2026-11-02T10:10:00Z"
+}
+~~~
+
+Эти authoring endpoints показывают `is_correct` владельцу банка. В student
+attempt это поле скрыто до закрытия.
+
+### GET /v1/question-banks/{bankID}/questions
+
+Login: да. CSRF: нет. `bankID` — UUID. Query/body: нет.
+
+Успех `200` — непагинированный массив объектов вопроса. Ошибки: `400` UUID,
+`401`, `404`, `500`. Запрос безопасно повторять.
+
+### POST /v1/question-banks/{bankID}/questions
+
+Login: да. CSRF: да. `bankID` — UUID. JSON до 1 MiB:
+
+~~~json
+{
+  "text": "В каком году началась Вторая мировая война?",
+  "options": [
+    {"text": "1939", "is_correct": true},
+    {"text": "1941", "is_correct": false}
+  ]
+}
+~~~
+
+Для ручного создания нужны минимум два непустых уникальных варианта и ровно один
+`is_correct: true`. Позиции назначает сервер по порядку массива.
+
+Успех `201` — полный объект вопроса. Ошибки: `400`, `401`, `403`, `404`,
+`413`, `415`, `500`. Повтор создаёт ещё один вопрос.
+
+### GET /v1/question-banks/{bankID}/questions/{questionID}
+
+Login: да. CSRF: нет. Оба path parameter — UUID.
+
+Успех `200` — полный объект вопроса. Ошибки: `400`, `401`, `404`, `500`.
+Чужой `questionID` или вопрос из другого банка дают `404`. Запрос повторяемый.
+
+### PUT /v1/question-banks/{bankID}/questions/{questionID}
+
+Login: да. CSRF: да. Оба path parameter — UUID. JSON совпадает с create:
+
+~~~json
+{
+  "text": "В каком году началась Вторая мировая война?",
+  "options": [
+    {"text": "1939", "is_correct": true},
+    {"text": "1941", "is_correct": false}
+  ]
+}
+~~~
+
+Это полная замена текста и всех вариантов, не частичный patch. Успех `200` —
+обновлённый вопрос. Ошибки: `400`, `401`, `403`, `404`, `413`, `415`, `500`.
+Повтор сохраняет то же содержимое, но варианты могут получить новые UUID.
+
+### DELETE /v1/question-banks/{bankID}/questions/{questionID}
+
+Login: да. CSRF: да. Оба path parameter — UUID. Body/query: нет.
+
+Успех `204`. Ошибки: `400`, `401`, `403`, `404`, `500`.
+Повтор возвращает `404`.
+
+## Import DOCX
+
+Поддерживается текущий ограниченный формат DOCX. Формулы, изображения и
+embedded objects возвращают понятную ошибку; универсальный Word/PDF parser
+не обещается.
+
+### POST /v1/question-banks/{bankID}/imports/preview
+
+Login: да. CSRF: да. `bankID` — UUID. Body: `multipart/form-data`, поле
+`file` содержит один `.docx`.
+
+Пример формы:
+
+~~~http
+POST /v1/question-banks/22222222-2222-4222-8222-222222222222/imports/preview
+Origin: http://localhost:8080
+X-CSRF-Token: <csrf-token>
+Content-Type: multipart/form-data; boundary=...
+~~~
+
+Успех `200`:
+
+~~~json
+{
+  "questions_count": 1,
+  "can_import": true,
+  "issues": [],
+  "questions": [
+    {
+      "source_number": 1,
+      "text": "Столица Франции?",
+      "options": [
+        {"label": "A", "text": "Париж", "is_correct": true},
+        {"label": "B", "text": "Лион", "is_correct": false}
+      ]
+    }
+  ]
+}
+~~~
+
+`issues` может содержать `source_number`, `field`, `code`, `message`.
+Frontend должен показать их пользователю перед подтверждением. Preview ничего
+не записывает в банк, поэтому его можно повторять.
+
+Ошибки: `400` form/file, `401`, `403`, `404`, `413` (request 11 MiB или
+file 10 MiB), `415` не DOCX, `422` повреждённый/неподдерживаемый DOCX,
+`429`, `500`. Извлекаемый XML ограничен 20 MiB.
+
+### POST /v1/question-banks/{bankID}/imports
+
+Login: да. CSRF: да. `bankID` — UUID. JSON до 10 MiB. Обычно frontend
+отправляет отредактированный массив `questions` из preview:
+
+~~~json
+{
+  "questions": [
+    {
+      "source_number": 1,
+      "text": "Столица Франции?",
+      "options": [
+        {"label": "A", "text": "Париж", "is_correct": true},
+        {"label": "B", "text": "Лион", "is_correct": false}
+      ]
+    }
+  ]
+}
+~~~
+
+Успех `201`:
+
+~~~json
+{
+  "imported_questions": 1,
+  "imported_options": 2
+}
+~~~
+
+Ошибки: `400`, `401`, `403`, `404`, `413`, `415`, `429`, `500`.
+Все вопросы и варианты одного запроса записываются одной транзакцией.
+
+Повторный `POST /imports` добавляет ещё один набор. Автоматической
+дедупликации и idempotency key нет. Frontend не должен повторять запрос после
+неясного network failure без подтверждения пользователя.
+
+## Quizzes
+
+### POST /v1/question-banks/{bankID}/quizzes
+
+Login: да. CSRF: да. `bankID` — UUID. JSON до 1 MiB:
+
+~~~json
+{
+  "question_count": 1,
+  "time_limit_minutes": 30,
+  "shuffle_options": true
+}
+~~~
+
+`question_count` должен быть положительным и не больше числа вопросов банка.
+`time_limit_minutes` допустим от 0 до 180; `0` означает отсутствие timer.
+
+Успех `201`, только метаданные:
+
+~~~json
+{
+  "id": "66666666-6666-4666-8666-666666666666",
+  "question_bank_id": "22222222-2222-4222-8222-222222222222",
+  "question_count": 1,
+  "created_at": "2026-11-02T10:20:00Z"
+}
+~~~
+
+Сервер случайно выбирает вопросы и сохраняет snapshot. Ошибки: `400`, `401`,
+`403`, `404`, `413`, `415`, `500`. Повтор создаёт новый quiz и новую случайную
+подборку.
+
+### GET /v1/quizzes
+
+Login: да. CSRF: нет. Query: `limit` и `offset`.
+
+~~~http
+GET /v1/quizzes?limit=20&offset=0
+~~~
+
+Успех `200`:
+
+~~~json
+{
+  "items": [
+    {
+      "id": "66666666-6666-4666-8666-666666666666",
+      "question_bank_id": "22222222-2222-4222-8222-222222222222",
+      "question_count": 1,
+      "time_limit_minutes": 30,
+      "shuffle_options": true,
+      "created_at": "2026-11-02T10:20:00Z"
+    }
+  ],
+  "limit": 20,
+  "offset": 0
+}
+~~~
+
+Ошибки: `400` query, `401`, `500`. Запрос безопасно повторять.
+
+### GET /v1/quizzes/{quizID}
+
+Login: да. CSRF: нет. `quizID` — UUID.
+
+Успех `200`, полный snapshot без правильности:
+
+~~~json
+{
+  "id": "66666666-6666-4666-8666-666666666666",
+  "question_bank_id": "22222222-2222-4222-8222-222222222222",
+  "question_count": 1,
+  "time_limit_minutes": 30,
+  "shuffle_options": true,
+  "created_at": "2026-11-02T10:20:00Z",
+  "questions": [
+    {
+      "id": "77777777-7777-4777-8777-777777777777",
+      "quiz_id": "66666666-6666-4666-8666-666666666666",
+      "text": "Столица Франции?",
+      "position": 1,
+      "options": [
+        {
+          "id": "88888888-8888-4888-8888-888888888888",
+          "quiz_question_id": "77777777-7777-4777-8777-777777777777",
+          "text": "Париж",
+          "position": 1
+        }
+      ]
+    }
+  ]
+}
+~~~
+
+Ошибки: `400`, `401`, `404`, `500`. Запрос безопасно повторять.
+
+### DELETE /v1/quizzes/{quizID}
+
+Login: да. CSRF: да. `quizID` — UUID. Body/query: нет.
+
+Успех `204`. Ошибки: `400`, `401`, `403`, `404`, `500`.
+Удаляются snapshot и связанные attempts. Повтор возвращает `404`.
+
+## Attempts, ответы и результат
+
+Статусы: `in_progress`, `completed`, `expired`.
+
+Подробная активная попытка:
+
+~~~json
+{
+  "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "quiz_id": "66666666-6666-4666-8666-666666666666",
+  "status": "in_progress",
+  "started_at": "2026-11-02T10:30:00Z",
+  "deadline_at": "2026-11-02T11:00:00Z",
+  "finished_at": null,
+  "server_time": "2026-11-02T10:30:05Z",
+  "questions": [
+    {
+      "id": "77777777-7777-4777-8777-777777777777",
+      "text": "Столица Франции?",
+      "position": 1,
+      "options": [
+        {
+          "id": "88888888-8888-4888-8888-888888888888",
+          "text": "Париж",
+          "position": 1
+        }
+      ]
+    }
+  ],
+  "answers": []
+}
+~~~
+
+### POST /v1/quizzes/{quizID}/attempts
+
+Login: да. CSRF: да. `quizID` — UUID. Body/query: нет.
+
+Успех:
+
+- `201` — создана новая попытка;
+- `200` — уже есть активная попытка этого пользователя для этого quiz.
+
+В обоих случаях тело — подробная попытка выше. Повтор во время `in_progress`
+возвращает тот же `attemptID`, `started_at` и `deadline_at`. После `completed`
+или `expired` следующий Start создаёт новую попытку с новым временем и без
+переноса ответов. Для новой случайной подборки нужно создать новый quiz.
+
+Ошибки: `400`, `401`, `403`, `404`, `500`.
+
+### GET /v1/attempts/{attemptID}
+
+Login: да. CSRF: нет. `attemptID` — UUID. Body/query: нет.
+
+Успех `200` — подробная попытка. `answers` содержит сохранённые ID:
+
+~~~json
+{
+  "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "quiz_question_id": "77777777-7777-4777-8777-777777777777",
+  "quiz_answer_option_id": "88888888-8888-4888-8888-888888888888"
+}
+~~~
+
+Ответ позволяет полностью восстановить экран после reload. Если deadline уже
+наступил, статус не будет означать, что ответы ещё принимаются. Правильность
+вариантов не раскрывается. Ошибки: `400`, `401`, `404`, `500`.
+Запрос безопасно повторять.
+
+### PUT /v1/attempts/{attemptID}/answers/{quizQuestionID}
+
+Login: да. CSRF: да. Оба path parameter — UUID. JSON до 1 MiB:
+
+~~~json
+{
+  "option_id": "88888888-8888-4888-8888-888888888888"
+}
+~~~
+
+Option обязан принадлежать этому quiz question, вопрос — quiz попытки, а
+попытка — пользователю и иметь `in_progress` до deadline.
+
+Успех `200`:
+
+~~~json
+{
+  "quiz_question_id": "77777777-7777-4777-8777-777777777777",
+  "option_id": "88888888-8888-4888-8888-888888888888",
+  "updated_at": "2026-11-02T10:35:00Z"
+}
+~~~
+
+Правильность в ответе отсутствует. Ошибки: `400` UUID/JSON, `401`, `403`,
+`404` чужая связь/ресурс, `409` попытка закрыта или deadline наступил,
+`413`, `415`, `500`.
+
+Повтор того же выбора безопасен и оставляет одну строку ответа; `updated_at`
+может обновиться. Другой `option_id` заменяет выбор в той же строке.
+
+### POST /v1/attempts/{attemptID}/finish
+
+Login: да. CSRF: да. `attemptID` — UUID. Body/query: нет. Клиент не отправляет
+score, `is_correct` или время завершения.
+
+Успех `200` — Result object:
+
+~~~json
+{
+  "attempt_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "quiz_id": "66666666-6666-4666-8666-666666666666",
+  "status": "completed",
+  "total_questions": 1,
+  "answered_questions": 1,
+  "correct_answers": 1,
+  "wrong_answers": 0,
+  "unanswered_questions": 0,
+  "percentage": 100,
+  "started_at": "2026-11-02T10:30:00Z",
+  "finished_at": "2026-11-02T10:40:00Z",
+  "correct_answers_list": [
+    {
+      "id": "77777777-7777-4777-8777-777777777777",
+      "text": "Столица Франции?",
+      "position": 1,
+      "selected_option_id": "88888888-8888-4888-8888-888888888888",
+      "is_correct": true,
+      "options": [
+        {
+          "id": "88888888-8888-4888-8888-888888888888",
+          "quiz_question_id": "77777777-7777-4777-8777-777777777777",
+          "text": "Париж",
+          "position": 1,
+          "is_correct": true,
+          "is_selected": true
+        }
+      ]
+    }
+  ],
+  "wrong_answers_list": [],
+  "unanswered_questions_list": []
+}
+~~~
+
+Если deadline наступил, status будет `expired`, иначе `completed`.
+`percentage = correct_answers / total_questions * 100`; при нуле вопросов
+сервер возвращает 0. Полное правило зафиксировано в [decisions.md](decisions.md).
+
+Ошибки: `400`, `401`, `403`, `404`, `500`. Finish идемпотентен по результату:
+повтор не создаёт новую попытку, не переносит `finished_at` и возвращает
+сохранённый статус с тем же результатом.
+
+### GET /v1/attempts/{attemptID}/result
+
+Login: да. CSRF: нет. `attemptID` — UUID. Body/query: нет.
+
+Успех `200` — тот же Result object, что Finish. Для уже закрытой попытки
+возвращается стабильный результат. Для просроченной `in_progress` попытки
+сервер сначала фиксирует `expired`, затем возвращает результат.
+
+Ошибки: `400`, `401`, `404`, `409` если попытка ещё активна и deadline не
+наступил, `500`. Запрос безопасно повторять. Это основной endpoint для
+повторного открытия страницы результата.
+
+### GET /v1/quizzes/{quizID}/attempts
+
+Login: да. CSRF: нет. `quizID` — UUID. Query: `limit`, `offset`.
+
+~~~http
+GET /v1/quizzes/66666666-6666-4666-8666-666666666666/attempts?limit=20&offset=0
+~~~
+
+Успех `200`:
+
+~~~json
+{
+  "items": [
+    {
+      "attempt_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "quiz_id": "66666666-6666-4666-8666-666666666666",
+      "status": "completed",
+      "started_at": "2026-11-02T10:30:00Z",
+      "deadline_at": "2026-11-02T11:00:00Z",
+      "finished_at": "2026-11-02T10:40:00Z",
+      "correct_answers": 1,
+      "gradable_count": 1,
+      "percentage": 100
+    }
+  ],
+  "limit": 20,
+  "offset": 0
+}
+~~~
+
+Для активной попытки `percentage` равен `null`. Истёкший deadline учитывается:
+такую попытку нельзя показывать как доступную для продолжения.
+
+Ошибки: `400` UUID/query, `401`, `404`, `500`. Запрос безопасно повторять.
+
+## Служебные endpoints
+
+### GET /health
+
+Login/CSRF: нет. Body/path/query: нет.
+
+Успех `200`:
+
+~~~json
+{"status":"ok"}
+~~~
+
+Проверяет, что HTTP-процесс работает. Запрос безопасно повторять.
+
+### GET /ready
+
+Login/CSRF: нет. Body/path/query: нет.
+
+Успех `200`:
+
+~~~json
+{"status":"ready"}
+~~~
+
+Если PostgreSQL недоступен, `503`:
+
+~~~json
+{"error":"not ready"}
+~~~
+
+Запрос безопасно повторять.
+
+## Лимиты и rate limiting
 
 | Ресурс | Лимит |
 | --- | --- |
-| login/register JSON | 16 KiB |
+| Login/register/verify/resend JSON | 16 KiB |
 | Обычный JSON | 1 MiB |
-| Подтверждение imports JSON | 10 MiB |
+| Import confirmation JSON | 10 MiB |
 | DOCX-файл | 10 MiB |
-| Multipart-запрос | 11 MiB |
+| Multipart upload | 11 MiB |
 | Извлекаемый DOCX XML | 20 MiB |
-| Одновременные preview и imports | 4 на процесс, общий лимит |
-| login | 10 запросов/минуту/IP |
-| register | 5 запросов/час/IP |
-| preview + imports | 10 запросов/минуту/пользователя, общий счётчик |
+| Одновременные preview/imports | 4 на процесс |
+| Login | 10 запросов/минуту/IP |
+| Register | 5 запросов/час/IP |
+| Verify email | 60 запросов/час/IP |
+| Resend verification | 10 запросов/час/IP |
+| Выдача verification token | 1 за 60 секунд, не более 5/час/аккаунт |
+| Preview + import | 10 запросов/минуту/пользователя |
 
-Rate limiter хранится в памяти одного backend: не более 10 000 ключей
-на limiter, по заполнении новые ключи получают 429 до освобождения истёкших.
-Перезапуск обнуляет счётчики. Ответ 429 содержит Retry-After.
-IP берётся из RemoteAddr; X-Forwarded-For не доверяется. За reverse proxy
-auth-лимит может быть общим для клиентов proxy — перед открытым тестом настройте
-дополнительные per-IP лимиты на proxy. Для нескольких backend нужен общий limiter.
+Rate limiter текущей версии хранится в памяти одного backend. Перезапуск
+обнуляет IP-счётчики. Лимит выдачи verification token хранится в БД.
 
-Ошибки имеют форму `{"error":"текст"}`. Отсутствие auth — 401, запрет CSRF — 403,
-чужой/отсутствующий ресурс — 404. SQL, пароль, token и пути сервера не возвращаются.
-Создание ресурсов — 201; 204 всегда без JSON. Login использует одинаковый ответ
-401 для неизвестного email и неправильного пароля; сбой PostgreSQL остаётся 500.
+## Insomnia collection
 
-## Работа процесса
+Файл [Question-To-Quiz.insomnia.json](insomnia/Question-To-Quiz.insomnia.json)
+использует импортируемый Insomnia v4 JSON. Современная Insomnia продолжает
+принимать этот формат.
 
-Логи содержат method, шаблон route (без пользовательского URL/query), status,
-duration, X-Request-ID. Безопасный входящий request ID сохраняется,
-иначе генерируется новый. Cookie, token, пароли и содержимое документов не логируются.
-Panic одного handler перехватывается, клиент получает безопасный 500;
-если ответ уже начат, соединение прерывается. Процесс продолжает работать.
+После импорта:
 
-HTTP timeouts: заголовки 5 секунд, чтение/запись 30 секунд, idle 60 секунд;
-SQL использует context запроса, общий дедлайн запроса — 30 секунд.
-Graceful shutdown: до 10 секунд на активные запросы, затем закрытие соединений;
-pool закрывается после остановки HTTP-сервера. `/health` — лёгкая проверка,
-`/ready` проверяет PostgreSQL с timeout 2 секунды.
+1. Выбрать sub-environment `Local` или `Staging`.
+2. Для Staging заменить `.invalid` URL на настоящий HTTPS origin.
+3. Ввести `email` и `password` только в локальной среде Insomnia.
+4. Выполнить Register, открыть письмо и подтвердить email. Затем Login и CSRF.
+   Для теста через Insomnia можно вручную скопировать token из фрагмента ссылки
+   в локальную переменную `verification_token` и выполнить Verify Email.
+5. Затем выполнить основной путь: создать банк, вопрос, quiz, attempt,
+   сохранить answer, Finish, Get Result.
+6. Для Preview вручную выбрать DOCX в multipart field `file`.
 
-Секреты задаются окружением, `.env` и ключи исключены из git и Docker context.
-`.env.example` содержит только placeholders. Перед публикацией проверяйте
-полную историю git и настройки используемой среды. Если секрет уже опубликован,
-его нужно заменить у провайдера/в БД; удаление файла не отзывает секрет.
+Collection содержит пустой cookie jar и пустые значения
+`password`, `csrf_token`, `verification_token`. Resource ID подставляются
+из ответов во время выполнения. После Login Insomnia хранит cookie в runtime.
+After-response scripts сохраняют полученные resource ID и CSRF token в выбранный
+environment для следующих запросов.
 
-Основания: [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html),
-[OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html),
-[Go net/http](https://pkg.go.dev/net/http).
+Перед повторным экспортом из Insomnia очистить cookie jar, `password`,
+`csrf_token`, `verification_token` и runtime ID. Пометка confidential не делает экспорт безопасным:
+значения confidential variables могут попасть в экспорт в открытом виде.
+
+Особое поведение:
+
+- повторный Import добавляет ещё один набор вопросов;
+- повторный Start возвращает текущую активную попытку, а после закрытия создаёт новую;
+- повторный Finish возвращает результат той же закрытой попытки;
+- SaveAnswer делает UPSERT одного выбора для одного вопроса.
+
+## Безопасность и эксплуатация
+
+Настройка писем, Gmail App Password, локального inbox и миграции:
+[email-verification.md](email-verification.md). Миграция сохраняет доступ
+старым аккаунтам: их `email_verified_at` заполняется датой перехода на новую
+версию. Это политика совместимости, а не доказательство проверки их почты.
+
+Production требует `APP_ENV=production` и явный
+`PUBLIC_ORIGIN=https://ваш-домен`. Cookie и CSRF token не логируются. Ответы
+имеют `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` и
+`X-Request-ID`.
+
+HTTP request deadline — 30 секунд. `/ready` проверяет PostgreSQL с timeout
+2 секунды. Реальные секреты задаются окружением; `.env.example` содержит только
+placeholders.
+
+Справочные материалы:
+
+- [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+- [OWASP CSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [Go net/http](https://pkg.go.dev/net/http)
+- [Insomnia import/export](https://developer.konghq.com/insomnia/import-export/)
+- [Insomnia environments](https://developer.konghq.com/insomnia/environments/)

@@ -1,0 +1,1245 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-11-04T14:00:00.000Z",
+  "__export_source": "Question-To-Quiz email verification (sanitized)",
+  "resources": [
+    {
+      "_id": "wrk_qtp_api_v1",
+      "parentId": null,
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "Question-To-Quiz API v1",
+      "description": "Sanitized frontend workflow. No session cookies, CSRF tokens or passwords are stored in this file. See docs/api.md.",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "env_qtp_base",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "Base Environment",
+      "data": {
+        "base_url": "",
+        "origin": "",
+        "email": "",
+        "password": "",
+        "bank_id": "",
+        "question_id": "",
+        "source_option_id": "",
+        "quiz_id": "",
+        "quiz_question_id": "",
+        "quiz_option_id": "",
+        "attempt_id": "",
+        "user_id": "",
+        "csrf_token": "",
+        "limit": "20",
+        "offset": "0",
+        "verification_token": ""
+      },
+      "dataPropertyOrder": null,
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 0,
+      "_type": "environment"
+    },
+    {
+      "_id": "env_qtp_local",
+      "parentId": "env_qtp_base",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "Local",
+      "data": {
+        "base_url": "http://localhost:8080",
+        "origin": "http://localhost:8080",
+        "email": "student@example.com",
+        "password": "",
+        "verification_token": ""
+      },
+      "dataPropertyOrder": null,
+      "color": "#43a047",
+      "isPrivate": false,
+      "metaSortKey": 1,
+      "_type": "environment"
+    },
+    {
+      "_id": "env_qtp_staging",
+      "parentId": "env_qtp_base",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "Staging (configure first)",
+      "data": {
+        "base_url": "https://staging.example.invalid",
+        "origin": "https://staging.example.invalid",
+        "email": "",
+        "password": "",
+        "verification_token": ""
+      },
+      "dataPropertyOrder": null,
+      "color": "#fb8c00",
+      "isPrivate": false,
+      "metaSortKey": 2,
+      "_type": "environment"
+    },
+    {
+      "_id": "jar_qtp_empty",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "Default Jar",
+      "cookies": [],
+      "_type": "cookie_jar"
+    },
+    {
+      "_id": "fld_qtp_system",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "00 System",
+      "description": "Liveness and readiness checks.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 1000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_qtp_auth",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "01 Auth",
+      "description": "Register, confirm email, Login, then get CSRF. All password and token values must be set only in your local environment.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 2000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_qtp_banks",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "02 Question Banks",
+      "description": "Question bank CRUD.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 3000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_qtp_questions",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "03 Questions",
+      "description": "Manual question CRUD. Authoring responses include is_correct.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 4000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_qtp_imports",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "04 DOCX Import",
+      "description": "Preview first. Import confirmation is not idempotent and adds another set when repeated.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 5000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_qtp_quizzes",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "05 Quizzes",
+      "description": "Create and inspect immutable quiz snapshots.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 6000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "fld_qtp_attempts",
+      "parentId": "wrk_qtp_api_v1",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "name": "06 Attempts",
+      "description": "Start, restore, save, finish and read results.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": 7000,
+      "_type": "request_group"
+    },
+    {
+      "_id": "req_qtp_health",
+      "parentId": "fld_qtp_system",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/health",
+      "name": "Health",
+      "description": "200 {\"status\":\"ok\"}. Public and safe to repeat.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 100,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_ready",
+      "parentId": "fld_qtp_system",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/ready",
+      "name": "Ready",
+      "description": "200 when PostgreSQL is ready; 503 {\"error\":\"not ready\"} otherwise.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 200,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_register",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/auth/register",
+      "name": "01 Register",
+      "description": "201 creates a pending account and sends a verification email. Check verification_email_sent. Repeating Register returns 409; use Resend Verification instead.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.email }}\",\n  \"name\": \"Demo Student\",\n  \"password\": \"{{ _.password }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200 || insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"user_id\", body.id);\n}",
+      "metaSortKey": 300,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_verify_email",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793790000000,
+      "created": 1793790000000,
+      "url": "{{ _.base_url }}/v1/auth/verify-email",
+      "name": "02 Verify Email",
+      "description": "Manually copy token from the email link fragment into verification_token in your selected local environment. 200 confirms; repeated/expired/replaced link returns 400. No login or session CSRF required.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"token\": \"{{ _.verification_token }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200) {\n  insomnia.environment.unset(\"verification_token\");\n}",
+      "metaSortKey": 320,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_resend_verification",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793790000000,
+      "created": 1793790000000,
+      "url": "{{ _.base_url }}/v1/auth/resend-verification",
+      "name": "03 Resend Verification",
+      "description": "202 generic response. Wait at least 60 seconds. Actual issuance replaces the old link; maximum five issues per account per hour. No automatic retries.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.email }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 340,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_verification_page",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793790000000,
+      "created": 1793790000000,
+      "url": "{{ _.base_url }}/v1/auth/verify-email",
+      "name": "View Verification Page (HTML)",
+      "description": "200 HTML page. To activate, open the actual link from the email in a browser and press its button. Merely loading this page never consumes a token.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 360,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_login",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/auth/login",
+      "name": "04 Login",
+      "description": "200 only for verified accounts; correct password with unverified email returns 403. The HttpOnly session cookie stays in Insomnia's runtime cookie jar.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"{{ _.email }}\",\n  \"password\": \"{{ _.password }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200 || insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"user_id\", body.id);\n}",
+      "metaSortKey": 400,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_csrf",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/auth/csrf",
+      "name": "05 Get CSRF",
+      "description": "200 returns the CSRF token for the current cookie session. The script stores it in the selected runtime environment.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"csrf_token\", body.csrf_token);\n}",
+      "metaSortKey": 500,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_me",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/auth/me",
+      "name": "06 Current User",
+      "description": "200 current user; 401 means frontend should return to login.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 600,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_logout",
+      "parentId": "fld_qtp_auth",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/auth/logout",
+      "name": "07 Logout",
+      "description": "204 clears server session and cookie. A repeated logout returns 401.",
+      "method": "POST",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 204) {\n  insomnia.environment.unset(\"csrf_token\");\n}",
+      "metaSortKey": 700,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_banks_list",
+      "parentId": "fld_qtp_banks",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks",
+      "name": "List Banks",
+      "description": "200 returns an unpaginated JSON array.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 800,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_banks_create",
+      "parentId": "fld_qtp_banks",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks",
+      "name": "Create Bank",
+      "description": "201 creates a bank and stores bank_id. Repeating creates another bank.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"title\": \"Demo History Bank\",\n  \"description\": \"Created from sanitized Insomnia collection\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"bank_id\", body.id);\n}",
+      "metaSortKey": 900,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_banks_get",
+      "parentId": "fld_qtp_banks",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}",
+      "name": "Get Bank",
+      "description": "200 owned bank; 404 for absent or foreign bank.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_banks_patch",
+      "parentId": "fld_qtp_banks",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}",
+      "name": "Update Bank",
+      "description": "200 updates provided fields. At least one non-null field is required.",
+      "method": "PATCH",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"description\": \"Updated from Insomnia\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1100,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_banks_delete",
+      "parentId": "fld_qtp_banks",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}",
+      "name": "Delete Bank",
+      "description": "204 cascades related data. Run only when cleanup is intended; a repeat returns 404.",
+      "method": "DELETE",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1200,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_questions_list",
+      "parentId": "fld_qtp_questions",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/questions",
+      "name": "List Questions",
+      "description": "200 returns an unpaginated array including author is_correct flags.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1300,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_questions_create",
+      "parentId": "fld_qtp_questions",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/questions",
+      "name": "Create Question",
+      "description": "201 creates a question and stores question_id. Manual questions need at least two unique options and exactly one correct option.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"text\": \"Capital of France?\",\n  \"options\": [\n    {\n      \"text\": \"Paris\",\n      \"is_correct\": true\n    },\n    {\n      \"text\": \"Lyon\",\n      \"is_correct\": false\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200 || insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"question_id\", body.id);\n  if (body.options && body.options.length > 0) {\n    insomnia.environment.set(\"source_option_id\", body.options[0].id);\n  }\n}",
+      "metaSortKey": 1400,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_questions_get",
+      "parentId": "fld_qtp_questions",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/questions/{{ _.question_id }}",
+      "name": "Get Question",
+      "description": "200 full authoring question; 404 for absent, foreign or wrong-bank relation.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1500,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_questions_update",
+      "parentId": "fld_qtp_questions",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/questions/{{ _.question_id }}",
+      "name": "Replace Question",
+      "description": "200 fully replaces text and options. Option UUIDs can change.",
+      "method": "PUT",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"text\": \"Capital of France?\",\n  \"options\": [\n    {\n      \"text\": \"Paris\",\n      \"is_correct\": true\n    },\n    {\n      \"text\": \"Marseille\",\n      \"is_correct\": false\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200 || insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"question_id\", body.id);\n  if (body.options && body.options.length > 0) {\n    insomnia.environment.set(\"source_option_id\", body.options[0].id);\n  }\n}",
+      "metaSortKey": 1600,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_questions_delete",
+      "parentId": "fld_qtp_questions",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/questions/{{ _.question_id }}",
+      "name": "Delete Question",
+      "description": "204 deletes the source question. Run only when cleanup is intended.",
+      "method": "DELETE",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1700,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_import_preview",
+      "parentId": "fld_qtp_imports",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/imports/preview",
+      "name": "Preview DOCX",
+      "description": "Choose a local .docx in the multipart file field before sending. Preview writes nothing and is safe to repeat.",
+      "method": "POST",
+      "body": {
+        "mimeType": "multipart/form-data",
+        "params": [
+          {
+            "id": "pair_qtp_docx_file",
+            "name": "file",
+            "value": "",
+            "description": "Choose a supported DOCX locally. No file path is exported.",
+            "type": "file",
+            "fileName": "",
+            "disabled": false
+          }
+        ]
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1800,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_import_confirm",
+      "parentId": "fld_qtp_imports",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/imports",
+      "name": "Confirm Import",
+      "description": "201 inserts all drafts in one transaction. WARNING: repeating adds another set; no automatic deduplication.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"questions\": [\n    {\n      \"source_number\": 1,\n      \"text\": \"Imported example: 2 + 2?\",\n      \"options\": [\n        {\n          \"label\": \"A\",\n          \"text\": \"4\",\n          \"is_correct\": true\n        },\n        {\n          \"label\": \"B\",\n          \"text\": \"5\",\n          \"is_correct\": false\n        }\n      ]\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 1900,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_quizzes_create",
+      "parentId": "fld_qtp_quizzes",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/question-banks/{{ _.bank_id }}/quizzes",
+      "name": "01 Create Quiz",
+      "description": "201 creates an immutable snapshot and stores quiz_id. Repeating creates a new random snapshot.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"question_count\": 1,\n  \"time_limit_minutes\": 30,\n  \"shuffle_options\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"quiz_id\", body.id);\n}",
+      "metaSortKey": 2000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_quizzes_list",
+      "parentId": "fld_qtp_quizzes",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/quizzes",
+      "name": "02 List Quizzes",
+      "description": "200 paginated metadata only.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "id": "pair_qtp_quiz_limit",
+          "name": "limit",
+          "value": "{{ _.limit }}",
+          "description": "1..100",
+          "disabled": false
+        },
+        {
+          "id": "pair_qtp_quiz_offset",
+          "name": "offset",
+          "value": "{{ _.offset }}",
+          "description": "0 or greater",
+          "disabled": false
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 2100,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_quizzes_get",
+      "parentId": "fld_qtp_quizzes",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/quizzes/{{ _.quiz_id }}",
+      "name": "03 Get Full Quiz",
+      "description": "200 full snapshot without is_correct. Script stores the first quiz question and option IDs for the attempt workflow.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200) {\n  const body = insomnia.response.json();\n  if (body.questions && body.questions.length > 0) {\n    insomnia.environment.set(\"quiz_question_id\", body.questions[0].id);\n    if (body.questions[0].options && body.questions[0].options.length > 0) {\n      insomnia.environment.set(\"quiz_option_id\", body.questions[0].options[0].id);\n    }\n  }\n}",
+      "metaSortKey": 2200,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_quizzes_delete",
+      "parentId": "fld_qtp_quizzes",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/quizzes/{{ _.quiz_id }}",
+      "name": "Delete Quiz",
+      "description": "204 cascades snapshot and attempts. Run only for cleanup.",
+      "method": "DELETE",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 2300,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_attempt_start",
+      "parentId": "fld_qtp_attempts",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/quizzes/{{ _.quiz_id }}/attempts",
+      "name": "01 Start or Restore Attempt",
+      "description": "201 creates; repeated while active returns 200 with the same attempt and times. Script stores attempt/question/option IDs.",
+      "method": "POST",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200 || insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"attempt_id\", body.id);\n  if (body.questions && body.questions.length > 0) {\n    insomnia.environment.set(\"quiz_question_id\", body.questions[0].id);\n    if (body.questions[0].options && body.questions[0].options.length > 0) {\n      insomnia.environment.set(\"quiz_option_id\", body.questions[0].options[0].id);\n    }\n  }\n}",
+      "metaSortKey": 2400,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_attempt_get",
+      "parentId": "fld_qtp_attempts",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/attempts/{{ _.attempt_id }}",
+      "name": "02 Restore Attempt",
+      "description": "200 restores questions, saved selected IDs, server_time and deadline without correctness.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "if (insomnia.response.code === 200 || insomnia.response.code === 201) {\n  const body = insomnia.response.json();\n  insomnia.environment.set(\"attempt_id\", body.id);\n  if (body.questions && body.questions.length > 0) {\n    insomnia.environment.set(\"quiz_question_id\", body.questions[0].id);\n    if (body.questions[0].options && body.questions[0].options.length > 0) {\n      insomnia.environment.set(\"quiz_option_id\", body.questions[0].options[0].id);\n    }\n  }\n}",
+      "metaSortKey": 2500,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_answer_save",
+      "parentId": "fld_qtp_attempts",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/attempts/{{ _.attempt_id }}/answers/{{ _.quiz_question_id }}",
+      "name": "03 Save Answer",
+      "description": "200 UPSERT. Repeating keeps one row; changing option replaces the selection. Closed/expired returns 409.",
+      "method": "PUT",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"option_id\": \"{{ _.quiz_option_id }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        },
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 2600,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_attempt_finish",
+      "parentId": "fld_qtp_attempts",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/attempts/{{ _.attempt_id }}/finish",
+      "name": "04 Finish",
+      "description": "200 closes and returns full result with author flags. Repeating returns the same closed attempt result.",
+      "method": "POST",
+      "body": {},
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Origin",
+          "value": "{{ _.origin }}"
+        },
+        {
+          "name": "X-CSRF-Token",
+          "value": "{{ _.csrf_token }}"
+        }
+      ],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 2700,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_result_get",
+      "parentId": "fld_qtp_attempts",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/attempts/{{ _.attempt_id }}/result",
+      "name": "05 Get Result",
+      "description": "200 for completed/expired; finalizes an overdue attempt; 409 while still active.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 2800,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    },
+    {
+      "_id": "req_qtp_attempt_history",
+      "parentId": "fld_qtp_attempts",
+      "modified": 1793620800000,
+      "created": 1793620800000,
+      "url": "{{ _.base_url }}/v1/quizzes/{{ _.quiz_id }}/attempts",
+      "name": "06 Attempt History",
+      "description": "200 paginated attempt metadata. Active percentage is null.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "id": "pair_qtp_attempt_limit",
+          "name": "limit",
+          "value": "{{ _.limit }}",
+          "description": "1..100",
+          "disabled": false
+        },
+        {
+          "id": "pair_qtp_attempt_offset",
+          "name": "offset",
+          "value": "{{ _.offset }}",
+          "description": "0 or greater",
+          "disabled": false
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "preRequestScript": "",
+      "afterResponseScript": "",
+      "metaSortKey": 2900,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global",
+      "_type": "request"
+    }
+  ]
+}
