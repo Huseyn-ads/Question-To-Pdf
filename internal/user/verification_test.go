@@ -53,7 +53,7 @@ func emailToken(t *testing.T, link string) string {
 func verificationApp(t *testing.T) (*memoryUsers, *memorySessions, *captureMailer, http.Handler) {
 	t.Helper()
 	users, sessions, mailer := &memoryUsers{}, &memorySessions{}, &captureMailer{}
-	h := NewUserHandler(NewUserService(users, sessions, mailer, "https://quiz.test"), true, nil)
+	h := NewUserHandler(NewUserService(users, sessions, mailer, "https://quiz.test"), true)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/auth/register", h.Register)
 	mux.HandleFunc("POST /v1/auth/login", h.Login)

@@ -27,6 +27,8 @@ type userStore interface {
 	ConfirmEmail(context.Context, []byte) error
 	FindByEmail(context.Context, string) (*User, error)
 	FindByID(context.Context, string) (*User, error)
+	FindByGoogleSub(context.Context, string) (*User, error)
+	CreateGoogleUser(ctx context.Context, sub, email, name string) (*User, error)
 }
 
 type sessionStore interface {
@@ -67,6 +69,10 @@ func (s *UserService) Authenticate(ctx context.Context, request LoginRequest) (*
 		}
 		return nil, fmt.Errorf("find user by email: %w", err)
 	}
+	if foundUser.PasswordHash == "" {
+		_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(request.Password))
+		return nil, ErrInvalidCredentials
+	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(foundUser.PasswordHash), []byte(request.Password))
 
@@ -93,8 +99,30 @@ func (s *UserService) Login(ctx context.Context, request LoginRequest) (*LoginRe
 		return nil, fmt.Errorf("authenticate user: %w", err)
 	}
 
-	// Check after password verification so a wrong password still returns 401.
-	if newUser.EmailVerifiedAt == nil {
+	return s.createSession(ctx, newUser)
+}
+
+func (s *UserService) loginWithGoogle(ctx context.Context, sub string, profile googleClaims) (*LoginResult, error) {
+	currentUser, err := s.repository.FindByGoogleSub(ctx, sub)
+	if errors.Is(err, ErrUserNotFound) {
+		email := normalizeEmail(profile.Email)
+		if !profile.EmailVerified || !validEmail(email) || !strings.HasSuffix(email, "@gmail.com") {
+			return nil, ErrGoogleEmailRequired
+		}
+		name := strings.TrimSpace(profile.Name)
+		if name == "" || utf8.RuneCountInString(name) > 255 {
+			name = email
+		}
+		currentUser, err = s.repository.CreateGoogleUser(ctx, sub, email, name)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.createSession(ctx, currentUser)
+}
+
+func (s *UserService) createSession(ctx context.Context, currentUser *User) (*LoginResult, error) {
+	if currentUser.EmailVerifiedAt == nil {
 		return nil, ErrEmailNotVerified
 	}
 
@@ -110,7 +138,7 @@ func (s *UserService) Login(ctx context.Context, request LoginRequest) (*LoginRe
 	}
 
 	newSession := session.Session{
-		UserID:    newUser.ID,
+		UserID:    currentUser.ID,
 		TokenHash: hashedToken,
 		ExpiresAt: time.Now().UTC().Add(session.Duration),
 		CSRFToken: csrfToken,
@@ -123,7 +151,7 @@ func (s *UserService) Login(ctx context.Context, request LoginRequest) (*LoginRe
 	}
 
 	return &LoginResult{
-		User:      newUser,
+		User:      currentUser,
 		Token:     token,
 		ExpiresAt: createdSession.ExpiresAt,
 	}, nil

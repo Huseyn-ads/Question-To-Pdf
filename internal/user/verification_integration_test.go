@@ -55,16 +55,25 @@ func verificationDatabase(t *testing.T) *pgxpool.Pool {
 		"20260923111601_add_users_table.sql",
 		"20261104180000_add_email_verification.sql",
 	} {
-		body, err := os.ReadFile(filepath.Join("..", "..", "migrations", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		up := strings.Split(strings.Split(string(body), "-- +goose Up")[1], "-- +goose Down")[0]
-		if _, err := pool.Exec(ctx, up); err != nil {
-			t.Fatalf("apply %s: %v", name, err)
-		}
+		applyUserMigration(t, pool, name)
 	}
 	return pool
+}
+
+func applyUserMigration(t *testing.T, pool *pgxpool.Pool, name string) {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("..", "..", "migrations", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, migration, ok := strings.Cut(string(body), "-- +goose Up")
+	if !ok {
+		t.Fatalf("missing Up annotation in %s", name)
+	}
+	up, _, _ := strings.Cut(migration, "-- +goose Down")
+	if _, err := pool.Exec(context.Background(), up); err != nil {
+		t.Fatalf("apply %s: %v", name, err)
+	}
 }
 
 func TestVerificationRepositoryAtomicRegistration(t *testing.T) {

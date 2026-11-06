@@ -20,13 +20,14 @@ import (
 )
 
 type memoryUsers struct {
-	mu      sync.Mutex
-	user    *User
-	err     error
-	email   string
-	creates int
-	token   *EmailVerificationToken
-	issues  int
+	mu        sync.Mutex
+	user      *User
+	googleSub string
+	err       error
+	email     string
+	creates   int
+	token     *EmailVerificationToken
+	issues    int
 }
 
 func (s *memoryUsers) CreateWithVerification(_ context.Context, u *User, token *EmailVerificationToken) (*User, error) {
@@ -101,6 +102,37 @@ func (s *memoryUsers) FindByID(context.Context, string) (*User, error) {
 	return s.user, nil
 }
 
+func (s *memoryUsers) FindByGoogleSub(_ context.Context, sub string) (*User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.user == nil || s.googleSub != sub {
+		return nil, ErrUserNotFound
+	}
+	return s.user, nil
+}
+
+func (s *memoryUsers) CreateGoogleUser(_ context.Context, sub, email, name string) (*User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.err != nil {
+		return nil, s.err
+	}
+	if s.user != nil {
+		if s.googleSub == sub {
+			return s.user, nil
+		}
+		return nil, ErrEmailAlreadyExists
+	}
+	now := time.Now()
+	s.user = &User{ID: "user-id", Email: email, Name: name, CreatedAt: now, EmailVerifiedAt: &now}
+	s.googleSub = sub
+	s.creates++
+	return s.user, nil
+}
+
 type memorySessions struct {
 	current *session.Session
 	err     error
@@ -156,7 +188,7 @@ func TestLoginMissingWrongPasswordAndDatabaseFailure(t *testing.T) {
 		{"database failure", &memoryUsers{err: errors.New("postgres internal path /private/password")}, 500},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			h := NewUserHandler(NewUserService(tc.store, &memorySessions{}, &captureMailer{}, "https://quiz.test"), true, nil)
+			h := NewUserHandler(NewUserService(tc.store, &memorySessions{}, &captureMailer{}, "https://quiz.test"), true)
 			w := httptest.NewRecorder()
 			h.Login(w, jsonRequest("POST", "/v1/auth/login", `{"email":"student@example.com","password":"wrong-password"}`))
 			if w.Code != tc.status {
@@ -195,7 +227,7 @@ func TestRegisterValidationAndSingleJSONResponse(t *testing.T) {
 		}
 	}
 	u := &memoryUsers{}
-	h := NewUserHandler(NewUserService(u, &memorySessions{}, &captureMailer{}, "https://quiz.test"), false, nil)
+	h := NewUserHandler(NewUserService(u, &memorySessions{}, &captureMailer{}, "https://quiz.test"), false)
 	w := httptest.NewRecorder()
 	h.Register(w, jsonRequest("POST", "/v1/auth/register", `{"email":"  Student@Example.COM  ","name":" Student ","password":"password123"}`))
 	if w.Code != 201 || u.creates != 1 || u.user.Email != "student@example.com" {
@@ -228,7 +260,7 @@ func TestSessionCSRFAndLogoutLifecycle(t *testing.T) {
 	users := &memoryUsers{user: &User{ID: "user-id", Email: "student@example.com", PasswordHash: string(dummyPasswordHash), EmailVerifiedAt: &verifiedAt}}
 	sessions := &memorySessions{}
 	service := NewUserService(users, sessions, &captureMailer{}, "https://quiz.test")
-	h := NewUserHandler(service, true, nil)
+	h := NewUserHandler(service, true)
 	router := http.NewServeMux()
 	router.HandleFunc("POST /v1/auth/login", h.Login)
 	router.Handle("GET /v1/auth/csrf", h.RequireAuth(http.HandlerFunc(h.CSRF)))

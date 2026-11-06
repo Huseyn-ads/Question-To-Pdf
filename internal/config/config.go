@@ -14,6 +14,7 @@ type Config struct {
 	Database DatabaseConfig
 	Security SecurityConfig
 	Mail     MailConfig
+	Google   GoogleOAuthConfig
 }
 
 type SecurityConfig struct {
@@ -47,6 +48,10 @@ func Load() (Config, error) {
 	}
 
 	mail, err := loadMail(security.Production)
+	if err != nil {
+		return Config{}, err
+	}
+	google, err := loadGoogleOAuth(security)
 	if err != nil {
 		return Config{}, err
 	}
@@ -84,6 +89,7 @@ func Load() (Config, error) {
 			AppName:  valueOrDefault("APP_NAME", "Question-To-Quiz"),
 			Security: security,
 			Mail:     mail,
+			Google:   google,
 			HTTP: HTTPConfig{
 				Port: httpPort,
 			},

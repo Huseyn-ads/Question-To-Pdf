@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/google"
 
 	"qtp/internal/attempt"
 	"qtp/internal/config"
@@ -71,20 +69,11 @@ func run() error {
 
 	emailSender := mailer.NewSMTP(cfg.Mail)
 	userService := user.NewUserService(userRepository, sessionRepository, emailSender, cfg.Security.PublicOrigin)
-	googleOAuth := &oauth2.Config{
-		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		RedirectURL:  os.Getenv("GOOGLE_REDIRECT_URL"),
-		Endpoint:     google.Endpoint,
-		Scopes:       []string{"openid", "email", "profile"},
+	userHandler := user.NewUserHandler(userService, cfg.Security.CookieSecure)
+	if cfg.Google.ClientID != "" {
+		userHandler.ConfigureGoogleLogin(cfg.Google.ClientID, cfg.Google.ClientSecret, cfg.Google.RedirectURL)
 	}
-	userHandler := user.NewUserHandler(userService, cfg.Security.CookieSecure, googleOAuth)
 
-	if googleOAuth.ClientID != "" &&
-		googleOAuth.ClientSecret != "" &&
-		googleOAuth.RedirectURL != "" {
-		userHandler.SetGoogleOAuth(googleOAuth)
-	}
 	// File uploading
 	questionImportService := questionimport.NewService(questionBankService, questionRepository)
 	questionImportHandler := questionimport.NewHandler(questionImportService)
@@ -114,6 +103,7 @@ func run() error {
 	registerLimiter := httpx.NewRateLimiter(5, time.Hour, 10000)
 	resendLimiter := httpx.NewRateLimiter(10, time.Hour, 10000)
 	verifyLimiter := httpx.NewRateLimiter(60, time.Hour, 10000)
+	googleLimiter := httpx.NewRateLimiter(30, time.Minute, 10000)
 	importLimiter := httpx.NewRateLimiter(10, time.Minute, 10000)
 	importKey := func(r *http.Request) string {
 		currentUser, _ := user.UserFromContext(r.Context())
@@ -140,11 +130,11 @@ func run() error {
 	router.Handle("GET /v1/auth/me", userHandler.RequireAuth(http.HandlerFunc(userHandler.Me)))
 	router.Handle("POST /v1/auth/login", loginLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.Login)))
 	router.Handle("POST /v1/auth/register", registerLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.Register)))
+	router.Handle("GET /v1/auth/google/start", googleLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.GoogleStart)))
+	router.Handle("GET "+config.GoogleCallbackPath, googleLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.GoogleCallback)))
 	router.Handle("POST /v1/auth/verify-email", verifyLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.VerifyEmail)))
 	router.Handle("POST /v1/auth/resend-verification", resendLimiter.Middleware(httpx.RemoteIP, http.HandlerFunc(userHandler.ResendVerification)))
 	router.HandleFunc("GET /v1/auth/verify-email", userHandler.VerificationPage)
-	router.HandleFunc("GET /v1/auth/google/start", userHandler.GoogleStart)
-	router.HandleFunc("GET /v1/auth/google/callback", userHandler.GoogleCallback)
 
 	router.HandleFunc("GET /health", healthHandler)
 	router.HandleFunc("GET /ready", readyHandler(pool))

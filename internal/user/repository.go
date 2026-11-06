@@ -21,14 +21,6 @@ func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 	}
 }
 
-func (repo *UserRepository) CreateUserWithGoogleID() {
-
-}
-
-func (repo *UserRepository) FindByGoogleID() {
-
-}
-
 func (repo *UserRepository) CreateWithVerification(ctx context.Context, user *User, token *EmailVerificationToken) (*User, error) {
 	tx, err := repo.db.Begin(ctx)
 	if err != nil {
@@ -61,40 +53,99 @@ func (repo *UserRepository) CreateWithVerification(ctx context.Context, user *Us
 }
 
 func (repo *UserRepository) FindByEmail(ctx context.Context, email string) (*User, error) {
-	foundUser := &User{}
-	const query = "SELECT id, email, name, password_hash, created_at, updated_at, email_verified_at FROM users WHERE email = $1;"
-	row := repo.db.QueryRow(ctx, query, email)
+	const query = `
+		SELECT id, email, name, COALESCE(password_hash, ''),
+		       created_at, updated_at, email_verified_at
+		FROM users
+		WHERE email = $1;
+	`
 
-	err := row.Scan(&foundUser.ID, &foundUser.Email, &foundUser.Name, &foundUser.PasswordHash, &foundUser.CreatedAt, &foundUser.UpdatedAt, &foundUser.EmailVerifiedAt)
-
+	var found User
+	err := repo.db.QueryRow(ctx, query, email).Scan(
+		&found.ID, &found.Email, &found.Name, &found.PasswordHash,
+		&found.CreatedAt, &found.UpdatedAt, &found.EmailVerifiedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrUserNotFound
+	}
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
 		return nil, fmt.Errorf("find user by email: %w", err)
 	}
 
-	return foundUser, nil
+	return &found, nil
 }
 
 func (repo *UserRepository) FindByID(ctx context.Context, id string) (*User, error) {
-	foundUser := &User{}
-	const query = "SELECT id, email, name, password_hash, created_at, updated_at, email_verified_at FROM users WHERE id = $1;"
-	row := repo.db.QueryRow(ctx, query, id)
+	const query = `
+		SELECT id, email, name, COALESCE(password_hash, ''),
+		       created_at, updated_at, email_verified_at
+		FROM users
+		WHERE id = $1;
+	`
 
-	err := row.Scan(&foundUser.ID, &foundUser.Email, &foundUser.Name, &foundUser.PasswordHash, &foundUser.CreatedAt, &foundUser.UpdatedAt, &foundUser.EmailVerifiedAt)
-
+	var found User
+	err := repo.db.QueryRow(ctx, query, id).Scan(
+		&found.ID, &found.Email, &found.Name, &found.PasswordHash,
+		&found.CreatedAt, &found.UpdatedAt, &found.EmailVerifiedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrUserNotFound
+	}
 	if err != nil {
-
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
-
 		return nil, fmt.Errorf("find user by ID: %w", err)
 	}
 
-	return foundUser, nil
+	return &found, nil
+}
 
+func (repo *UserRepository) FindByGoogleSub(ctx context.Context, sub string) (*User, error) {
+	const query = `
+		SELECT id, email, name, created_at, updated_at, email_verified_at
+		FROM users
+		WHERE google_sub = $1;
+	`
+
+	var found User
+	err := repo.db.QueryRow(ctx, query, sub).Scan(
+		&found.ID, &found.Email, &found.Name,
+		&found.CreatedAt, &found.UpdatedAt, &found.EmailVerifiedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find user by Google subject: %w", err)
+	}
+
+	return &found, nil
+}
+
+func (repo *UserRepository) CreateGoogleUser(ctx context.Context, sub, email, name string) (*User, error) {
+	const query = `
+		INSERT INTO users (google_sub, email, name, email_verified_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT DO NOTHING
+		RETURNING id, email, name, created_at, updated_at, email_verified_at;
+	`
+
+	var created User
+	err := repo.db.QueryRow(ctx, query, sub, email, name).Scan(
+		&created.ID, &created.Email, &created.Name,
+		&created.CreatedAt, &created.UpdatedAt, &created.EmailVerifiedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// A concurrent callback may have inserted this subject already.
+		found, findErr := repo.FindByGoogleSub(ctx, sub)
+		if errors.Is(findErr, ErrUserNotFound) {
+			return nil, ErrEmailAlreadyExists
+		}
+		return found, findErr
+	}
+	if err != nil {
+		return nil, fmt.Errorf("create Google user: %w", err)
+	}
+
+	return &created, nil
 }
 
 func insertVerification(ctx context.Context, tx pgx.Tx, userID string, token *EmailVerificationToken) error {

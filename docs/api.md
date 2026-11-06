@@ -176,6 +176,8 @@ quiz не меняет его состав или результат попыт�
 | `POST /v1/auth/verify-email` | нет | нет, нужен Origin | Подтвердить email по token |
 | `POST /v1/auth/resend-verification` | нет | нет, нужен Origin | Повторное письмо |
 | `POST /v1/auth/login` | нет | нет, нужен Origin | Login и session cookie |
+| `GET /v1/auth/google/start` | нет | OAuth state и PKCE | Начать вход в Google |
+| `GET /v1/auth/google/callback` | нет | OAuth state, PKCE и nonce | Выдать session cookie |
 | `GET /v1/auth/me` | да | нет | Текущий пользователь |
 | `GET /v1/auth/csrf` | да | нет | CSRF token сессии |
 | `POST /v1/auth/logout` | да | да | Удалить сессию |
@@ -340,6 +342,29 @@ Session token в теле отсутствует.
 `429`, `500`. Проверка подтверждения идёт после проверки пароля.
 Каждый успешный login создаёт новую сессию и новый
 CSRF token; повторный login не возвращает старый token.
+
+### Вход через Google
+
+Для локального запуска задай в `.env` `GOOGLE_CLIENT_ID` целиком и `GOOGLE_CLIENT_SECRET` из OAuth-клиента типа Web application. В Google Auth Platform добавь `http://localhost:8080/v1/auth/google/callback` в **Authorized redirect URIs**. Backend берёт адрес callback из `PUBLIC_ORIGIN` и пути `/v1/auth/google/callback`. Если задан `GOOGLE_REDIRECT_URL`, он должен точно совпадать с этим адресом.
+
+После применения патча выполни `make migrate-up` при запущенной БД и пересобери backend через `docker compose up -d --build app`.
+
+#### GET /v1/auth/google/start
+
+Открой `/v1/auth/google/start` в браузере. Frontend может использовать обычную ссылку на этот маршрут. Запрос выполняется без тела и параметров. Ответ `302` устанавливает временную HttpOnly cookie на пять минут и перенаправляет браузер в Google. Каждый новый Start заменяет предыдущую попытку входа в этом браузере. При пустых Google credentials маршрут отвечает `503`. Превышение лимита запросов даёт `429`.
+
+#### GET /v1/auth/google/callback
+
+Браузер возвращается с параметрами `code` и `state` или с отказом Google. Тело запроса отсутствует. Backend проверяет `state` из временной cookie, обменивает код с PKCE и проверяет подпись ID token, `aud`, `iss`, срок действия и `nonce`.
+
+Первый успешный вход с подтверждённым `@gmail.com` создаёт пользователя и заполняет `email_verified_at`. Повторный вход находит его по Google `sub`, сохраняет локальный `id` и выдаёт новую сессию. Если email уже принадлежит аккаунту с другим способом входа, callback отвечает `409`. Для такого аккаунта используй существующий способ входа.
+
+Успех устанавливает обычную HttpOnly cookie `session` и отвечает `303` с `Location: /v1/auth/me`. Браузер открывает JSON текущего пользователя. Для изменяющих запросов frontend получает `X-CSRF-Token` через `GET /v1/auth/csrf` как после обычного login.
+
+- `400` при отмене, просроченной попытке или несовпадении `state` или `nonce`. Начни новый вход через `/start`.
+- `403` для нового аккаунта без подтверждённого Gmail.
+- `409` для уже занятого email.
+- `429` при превышении лимита, `503` при выключенном Google login, `502` при сбое Google или ошибке проверки ID token, `500` при ошибке backend.
 
 ### GET /v1/auth/me
 

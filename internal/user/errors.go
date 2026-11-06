@@ -14,6 +14,7 @@ var (
 	ErrInvalidCredentials       = errors.New("invalid email or password")
 	ErrUnauthorized             = errors.New("unauthorized")
 	ErrEmailNotVerified         = errors.New("email verification required")
+	ErrGoogleEmailRequired      = errors.New("sign in with a verified Gmail address")
 	ErrInvalidVerificationToken = errors.New("verification link is invalid or expired")
 	ErrVerificationNotPending   = errors.New("email verification is not pending")
 	ErrVerificationThrottled    = errors.New("verification email is rate limited")

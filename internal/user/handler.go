@@ -7,26 +7,19 @@ import (
 	"qtp/internal/httpx"
 	"qtp/internal/session"
 	"time"
-
-	"golang.org/x/oauth2"
 )
 
 type UserHandler struct {
 	service      *UserService
 	cookieSecure bool
-	googleOAuth  *oauth2.Config
+	google       *googleLogin
 }
 
-func NewUserHandler(us *UserService, cookieSecure bool, googleOAuth *oauth2.Config) *UserHandler {
+func NewUserHandler(us *UserService, cookieSecure bool) *UserHandler {
 	return &UserHandler{
 		service:      us,
 		cookieSecure: cookieSecure,
-		googleOAuth:  googleOAuth,
 	}
-}
-
-func (handler *UserHandler) LoginWithGoogle(w http.ResponseWriter, r *http.Request) {
-
 }
 
 func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -52,15 +45,7 @@ func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    result.Token,
-		Path:     "/",
-		Expires:  result.ExpiresAt,
-		HttpOnly: true,
-		Secure:   handler.cookieSecure,
-		SameSite: http.SameSiteLaxMode,
-	})
+	handler.setSessionCookie(w, result)
 
 	httpx.WriteJSON(w, http.StatusOK, UserResponse{
 		ID:              result.User.ID,
@@ -70,6 +55,18 @@ func (handler *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		EmailVerifiedAt: result.User.EmailVerifiedAt,
 	})
 
+}
+
+func (handler *UserHandler) setSessionCookie(w http.ResponseWriter, result *LoginResult) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    result.Token,
+		Path:     "/",
+		Expires:  result.ExpiresAt,
+		HttpOnly: true,
+		Secure:   handler.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
