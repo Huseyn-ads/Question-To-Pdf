@@ -1115,8 +1115,8 @@ func (repo *AttemptRepository) GetHistory(ctx context.Context, userID string, qu
 	WHERE id = $1 AND user_id = $2;
 	`
 
-	var dummyID int
-	err := repo.db.QueryRow(ctx, checkQuery, quizID, userID).Scan(&dummyID)
+	var ownedQuizID string
+	err := repo.db.QueryRow(ctx, checkQuery, quizID, userID).Scan(&ownedQuizID)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

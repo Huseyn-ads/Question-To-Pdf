@@ -31,7 +31,8 @@ func (handler *QuestionHandler) ListByBankID(w http.ResponseWriter, r *http.Requ
 
 	if err != nil {
 		switch {
-		case errors.Is(err, questionbank.ErrInvalidQuestionBankID):
+		case errors.Is(err, questionbank.ErrInvalidQuestionBankID),
+			errors.Is(err, ErrInvalidQuestionID):
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,
@@ -260,7 +261,8 @@ func (handler *QuestionHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		switch {
-		case errors.Is(err, questionbank.ErrInvalidQuestionBankID):
+		case errors.Is(err, questionbank.ErrInvalidQuestionBankID),
+			errors.Is(err, ErrInvalidQuestionID):
 			httpx.WriteError(
 				w,
 				http.StatusBadRequest,

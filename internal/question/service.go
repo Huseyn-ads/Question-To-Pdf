@@ -60,6 +60,10 @@ func (s *QuestionService) FindByID(ctx context.Context, userID string, bankID st
 }
 
 func (s *QuestionService) Create(ctx context.Context, bankID string, userID string, request CreateRequest) (*Question, error) {
+	if _, err := uuid.Parse(bankID); err != nil {
+		return nil, questionbank.ErrInvalidQuestionBankID
+	}
+
 	text, options, err := prepareQuestionData(
 		request.Text,
 		request.Options,
