@@ -521,7 +521,9 @@ func (repo *QuestionRepository) CreateMany(ctx context.Context, userID string, b
 		return fmt.Errorf("check question bank ownership: %w", err)
 	}
 
-	const questionQuery = `INSERT INTO questions (question_bank_id, text) VALUES ($1, $2) RETURNING id;`
+	// NOW() is the same for the whole transaction. clock_timestamp() keeps
+	// the document order, because the bank lists questions by created_at.
+	const questionQuery = `INSERT INTO questions (question_bank_id, text, created_at, updated_at) VALUES ($1, $2, clock_timestamp(), clock_timestamp()) RETURNING id;`
 	const optionQuery = `INSERT INTO answer_options (question_id,text,position,is_correct)VALUES ($1, $2, $3, $4);`
 	for _, question := range questions {
 		var questionID string

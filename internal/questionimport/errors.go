@@ -8,4 +8,6 @@ var (
 	ErrFileNameRequired = errors.New("file name is required")
 	ErrFileUpload       = errors.New("error while uploading file")
 	ErrFileCreate       = errors.New("error while creating file")
+
+	errConflictingAnswerMode = errors.New("answer_mode is given twice with different values")
 )

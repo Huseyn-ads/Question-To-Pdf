@@ -23,7 +23,7 @@ func NewService(
 	}
 }
 
-func (service *Service) Preview(ctx context.Context, userID string, bankID string, filePath string) (*importer.PreviewResult, error) {
+func (service *Service) Preview(ctx context.Context, userID string, bankID string, filePath string, answerMode string) (*importer.PreviewResult, error) {
 	_, err := service.questionBankService.FindByID(
 		ctx,
 		bankID,
@@ -46,16 +46,11 @@ func (service *Service) Preview(ctx context.Context, userID string, bankID strin
 		)
 	}
 
-	questions := importer.ParseQuestions(paragraphs)
+	result := importer.BuildPreview(paragraphs, importer.ParseOptions{
+		AnswerMode: answerMode,
+	})
 
-	issues := importer.ValidateQuestions(questions)
-
-	return &importer.PreviewResult{
-		QuestionsCount: len(questions),
-		CanImport:      true,
-		Issues:         issues,
-		Questions:      questions,
-	}, nil
+	return &result, nil
 }
 
 func (service *Service) CheckBank(ctx context.Context, userID, bankID string) error {

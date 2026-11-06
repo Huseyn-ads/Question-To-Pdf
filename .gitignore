@@ -3,3 +3,6 @@
 !.env.example
 *.key
 *.pem
+
+# Local DOCX samples and their references stay on this machine.
+local-docx-samples/

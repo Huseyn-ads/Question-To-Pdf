@@ -74,6 +74,12 @@ func (handler *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		defer r.MultipartForm.RemoveAll()
 	}
 
+	answerMode, err := answerModeFromRequest(r)
+	if err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		httpx.WriteError(w, http.StatusBadRequest, "file is required")
@@ -134,7 +140,7 @@ func (handler *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := handler.service.Preview(r.Context(), currentUser.ID, bankID, temporaryPath)
+	result, err := handler.service.Preview(r.Context(), currentUser.ID, bankID, temporaryPath, answerMode)
 	if err != nil {
 		handler.writeError(w, err)
 		return
@@ -217,4 +223,28 @@ func (handler *Handler) writeError(w http.ResponseWriter, err error) {
 		slog.Error("preview import", "error", err)
 		httpx.WriteError(w, http.StatusInternalServerError, "server error")
 	}
+}
+
+// answerModeFromRequest reads the optional answer_mode from the multipart
+// form or the query string. Both may be present only with the same value.
+func answerModeFromRequest(r *http.Request) (string, error) {
+	values := make([]string, 0, 2)
+	if r.MultipartForm != nil {
+		values = append(values, r.MultipartForm.Value["answer_mode"]...)
+	}
+	values = append(values, r.URL.Query()["answer_mode"]...)
+
+	mode := importer.AnswerModeAuto
+	for index, value := range values {
+		normalized, err := importer.NormalizeAnswerMode(value)
+		if err != nil {
+			return "", err
+		}
+		if index > 0 && normalized != mode {
+			return "", errConflictingAnswerMode
+		}
+		mode = normalized
+	}
+
+	return mode, nil
 }
