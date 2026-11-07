@@ -6,3 +6,6 @@
 
 # Local DOCX samples and their references stay on this machine.
 local-docx-samples/
+
+# macOS Finder metadata.
+.DS_Store
