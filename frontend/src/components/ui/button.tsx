@@ -14,12 +14,12 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: 'bg-forest text-surface hover:bg-forest-hover active:bg-forest-hover',
+        primary: 'bg-forest text-on-forest hover:bg-forest-hover active:bg-forest-hover',
         secondary:
           'border border-control/70 bg-surface text-ink hover:border-control hover:bg-forest-tint',
-        soft: 'bg-forest-soft text-forest hover:bg-[#d7e3d8]',
+        soft: 'bg-forest-soft text-forest hover:bg-forest-soft-hover',
         ghost: 'text-ink-muted hover:bg-sunken/70 hover:text-ink',
-        danger: 'bg-danger text-surface hover:bg-[#8e3a24]',
+        danger: 'bg-danger text-on-forest hover:bg-danger-hover',
         'danger-ghost': 'text-danger hover:bg-danger-soft',
         link: 'h-auto px-0 text-forest underline decoration-forest/40 underline-offset-4 hover:decoration-forest',
       },

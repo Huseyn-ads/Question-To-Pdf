@@ -7,6 +7,21 @@
     <meta name="theme-color" content="#F5F0E7" />
     <meta name="description" content="telebeland — учебное пространство: тесты из DOCX, прохождение и разбор ответов." />
     <title>telebeland</title>
+    <script>
+      // Before the first paint: saved theme and language, so nothing flickers.
+      ;(function () {
+        var theme = 'system', lang = ''
+        try {
+          theme = localStorage.getItem('telebeland.theme') || 'system'
+          lang = localStorage.getItem('telebeland.lang') || ''
+        } catch (e) {}
+        var dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        var root = document.documentElement
+        root.dataset.theme = dark ? 'dark' : 'light'
+        if (lang === 'az' || lang === 'ru') root.lang = lang
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#1A1815' : '#F5F0E7')
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

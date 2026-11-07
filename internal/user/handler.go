@@ -1,10 +1,12 @@
 package user
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"qtp/internal/httpx"
+	"qtp/internal/locale"
 	"qtp/internal/session"
 	"time"
 )
@@ -76,7 +78,7 @@ func (handler *UserHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := handler.service.Register(r.Context(), req)
+	result, err := handler.service.Register(requestLanguage(r), req)
 
 	if err != nil {
 		switch {
@@ -254,7 +256,7 @@ func (handler *UserHandler) ResendVerification(w http.ResponseWriter, r *http.Re
 	if !httpx.ReadJSON(w, r, &req, httpx.MaxAuthBody) {
 		return
 	}
-	if err := handler.service.ResendVerification(r.Context(), req.Email); err != nil {
+	if err := handler.service.ResendVerification(requestLanguage(r), req.Email); err != nil {
 		if errors.Is(err, ErrInvalidEmail) {
 			httpx.WriteError(w, http.StatusBadRequest, ErrInvalidEmail.Error())
 			return
@@ -267,4 +269,10 @@ func (handler *UserHandler) ResendVerification(w http.ResponseWriter, r *http.Re
 	httpx.WriteJSON(w, http.StatusAccepted, MessageResponse{
 		Message: "if verification is needed, an email will be sent; please wait before trying again",
 	})
+}
+
+// requestLanguage picks the email language from Accept-Language: the frontend
+// sends the interface language there.
+func requestLanguage(r *http.Request) context.Context {
+	return locale.WithLanguage(r.Context(), locale.FromAcceptLanguage(r.Header.Get("Accept-Language")))
 }

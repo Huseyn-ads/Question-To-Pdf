@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from './errors'
-import { clearCsrfToken, request, setUnauthorizedListener } from './http'
+import { clearCsrfToken, request, setRequestLanguage, setUnauthorizedListener } from './http'
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -84,6 +84,22 @@ describe('request', () => {
       request('/v1/auth/login', { method: 'POST', json: {}, context: 'login' }),
     ).rejects.toMatchObject({ kind: 'invalid_credentials' })
     expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends the interface language and tells a locked answer from a closed attempt', async () => {
+    setRequestLanguage('az')
+    fetchMock
+      .mockResolvedValueOnce(json(409, { error: 'question already answered' }))
+      .mockResolvedValueOnce(json(409, { error: 'your attempt expired' }))
+
+    await expect(request('/v1/attempts/a/answers/q', { method: 'PUT', json: {} })).rejects.toMatchObject({
+      kind: 'answer_locked',
+    })
+    await expect(request('/v1/attempts/a/answers/q', { method: 'PUT', json: {} })).rejects.toMatchObject({
+      kind: 'conflict',
+    })
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Accept-Language')).toBe('az')
+    setRequestLanguage('ru')
   })
 
   it('maps 403 "email verification required" and keeps Retry-After', async () => {

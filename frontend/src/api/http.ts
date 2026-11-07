@@ -18,6 +18,14 @@ export interface RawResponse<T> {
   data: T
 }
 
+// ── Interface language: emails from register/resend follow it ──────────────
+let language = 'ru'
+
+/** Called by the i18n provider; sent as Accept-Language on every request. */
+export function setRequestLanguage(lang: string) {
+  language = lang
+}
+
 // ── CSRF token: memory only, bound to the current session ──────────────────
 let csrfToken: string | null = null
 let csrfInFlight: Promise<string> | null = null
@@ -59,7 +67,7 @@ function buildUrl(path: string, query?: RequestOptions['query']) {
 }
 
 async function send<T>(path: string, options: RequestOptions, token?: string): Promise<RawResponse<T>> {
-  const headers = new Headers({ Accept: 'application/json' })
+  const headers = new Headers({ Accept: 'application/json', 'Accept-Language': language })
   let body: BodyInit | undefined
   if (options.json !== undefined) {
     headers.set('Content-Type', 'application/json')

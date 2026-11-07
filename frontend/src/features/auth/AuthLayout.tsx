@@ -3,13 +3,14 @@ import { Link } from 'react-router'
 import { useT } from '@/i18n'
 import { Logo } from '@/components/brand/Logo'
 import { DeskIllustration } from '@/components/brand/Illustrations'
+import { Preferences } from '@/components/layout/Preferences'
 
 /** Calm two-column frame for sign-in screens; a single column on phones. */
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   const t = useT()
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-line bg-[#EFE8DC] p-10 lg:flex xl:p-14">
+      <aside className="relative hidden flex-col justify-between overflow-hidden border-r border-line bg-rail p-10 lg:flex xl:p-14">
         <Link to="/" className="w-fit rounded-md" aria-label={t.meta.appName}>
           <Logo />
         </Link>
@@ -20,10 +21,13 @@ export function AuthLayout({ title, subtitle, children }: { title: string; subti
         <DeskIllustration className="w-full max-w-sm self-start" />
       </aside>
 
-      <main id="main" className="flex min-h-dvh flex-col px-4 py-6 sm:px-8 lg:min-h-0 lg:justify-center lg:py-12">
-        <Link to="/" className="mb-10 w-fit rounded-md lg:hidden" aria-label={t.meta.appName}>
-          <Logo />
-        </Link>
+      <main id="main" className="relative flex min-h-dvh flex-col px-4 py-5 sm:px-8 lg:min-h-0 lg:justify-center lg:py-12">
+        <div className="mb-10 flex items-center justify-between gap-3 lg:absolute lg:top-6 lg:right-8 lg:mb-0">
+          <Link to="/" className="w-fit rounded-md lg:hidden" aria-label={t.meta.appName}>
+            <Logo />
+          </Link>
+          <Preferences />
+        </div>
         <div className="mx-auto w-full max-w-[26rem]">
           <h1 className="font-display text-[1.875rem] leading-tight font-semibold text-ink">{title}</h1>
           {subtitle && <div className="mt-2 text-reading text-ink-muted">{subtitle}</div>}

@@ -26,12 +26,13 @@ export function mainNav(t: Messages, paths: Paths): NavItem[] {
     { key: 'dashboard', label: t.nav.dashboard, icon: LayoutDashboard, to: paths.dashboard, end: true },
     { key: 'banks', label: t.nav.banks, shortLabel: t.nav.banksShort, icon: BookOpenText, to: paths.banks },
     { key: 'quizzes', label: t.nav.quizzes, icon: ClipboardList, to: paths.quizzes },
+    { key: 'import', label: t.nav.importDocx, shortLabel: t.nav.importShort, icon: FileUp, to: paths.importDocx },
   ]
 }
 
 /**
- * Tool registry. Future generators (topic → quiz, topic → slides) are listed
- * now and switch on by giving them a route once their API exists.
+ * Tool registry, shown on the landing page. Future generators (topic → quiz,
+ * topic → slides) switch on by giving them a route once their API exists.
  */
 export function tools(t: Messages, paths: Paths): ToolItem[] {
   return [

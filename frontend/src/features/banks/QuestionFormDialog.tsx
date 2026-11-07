@@ -171,7 +171,7 @@ export function QuestionFormDialog({
                         className={cn(
                           'grid size-11 shrink-0 cursor-pointer place-items-center rounded-md border text-sm font-semibold',
                           'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-forest',
-                          isCorrect ? 'border-forest bg-forest text-surface' : 'border-control/70 bg-surface text-ink-muted',
+                          isCorrect ? 'border-forest bg-forest text-on-forest' : 'border-control/70 bg-surface text-ink-muted',
                         )}
                         title={t.questionForm.markCorrect(letter)}
                       >

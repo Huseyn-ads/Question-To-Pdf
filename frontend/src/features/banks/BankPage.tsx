@@ -340,7 +340,7 @@ function QuestionCard({
                 <span
                   className={cn(
                     'grid size-6 shrink-0 place-items-center rounded-sm text-xs font-semibold',
-                    option.is_correct ? 'bg-forest text-surface' : 'bg-sunken text-ink-muted',
+                    option.is_correct ? 'bg-forest text-on-forest' : 'bg-sunken text-ink-muted',
                   )}
                   aria-hidden
                 >

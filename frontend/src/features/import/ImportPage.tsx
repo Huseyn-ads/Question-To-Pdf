@@ -262,7 +262,7 @@ function Stepper({ step }: { step: Step }) {
             className={cn(
               'grid size-6 place-items-center rounded-full text-xs font-semibold',
               index < current && 'bg-forest-soft text-forest',
-              index === current && 'bg-forest text-surface',
+              index === current && 'bg-forest text-on-forest',
               index > current && 'border border-line text-ink-subtle',
             )}
             aria-hidden

@@ -311,16 +311,28 @@ func (repo *AttemptRepository) GetAttempt(ctx context.Context, userID string, at
 	}
 	rows.Close()
 
+	// Answers are final, so their correctness is shown right away and
+	// restored after a reload.
 	const findAnswersQuery = `
 		SELECT
-			id,
-			quiz_attempt_id,
-			quiz_question_id,
-			quiz_answer_option_id,
-			updated_at
-		FROM attempt_answers
-		WHERE quiz_attempt_id = $1
-		ORDER BY updated_at, id;
+			aa.id,
+			aa.quiz_attempt_id,
+			aa.quiz_question_id,
+			aa.quiz_answer_option_id,
+			aa.updated_at,
+			COALESCE(selected.is_correct, FALSE),
+			ARRAY(
+				SELECT correct.id::text
+				FROM quiz_answer_options correct
+				WHERE correct.quiz_question_id = aa.quiz_question_id
+					AND correct.is_correct
+				ORDER BY correct.position
+			)
+		FROM attempt_answers aa
+		LEFT JOIN quiz_answer_options selected
+			ON selected.id = aa.quiz_answer_option_id
+		WHERE aa.quiz_attempt_id = $1
+		ORDER BY aa.updated_at, aa.id;
 	`
 
 	answerRows, err := tx.Query(ctx, findAnswersQuery, details.ID)
@@ -336,6 +348,8 @@ func (repo *AttemptRepository) GetAttempt(ctx context.Context, userID string, at
 			&answer.QuizQuestionID,
 			&answer.QuizAnswerOptionID,
 			&answer.UpdatedAt,
+			&answer.IsCorrect,
+			&answer.CorrectOptionIDs,
 		); err != nil {
 			answerRows.Close()
 			return nil, fmt.Errorf("scan attempt answer: %w", err)
@@ -424,6 +438,9 @@ func (repo *AttemptRepository) SaveAnswer(ctx context.Context, userID string, at
 
 	attemptAnswer := AttemptAnswer{}
 
+	// The first choice is final: feedback is shown immediately, so changing
+	// the answer afterwards would let the student pick the revealed option.
+	// Re-sending the same choice is a safe retry and returns the saved row.
 	const saveAnswerQuery = `
 		INSERT INTO attempt_answers (
 		quiz_attempt_id,
@@ -431,10 +448,7 @@ func (repo *AttemptRepository) SaveAnswer(ctx context.Context, userID string, at
 		quiz_answer_option_id
 		)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (quiz_attempt_id, quiz_question_id)
-		DO UPDATE SET
-		quiz_answer_option_id = EXCLUDED.quiz_answer_option_id,
-		updated_at = NOW()
+		ON CONFLICT (quiz_attempt_id, quiz_question_id) DO NOTHING
 		RETURNING
 		id,
 		quiz_attempt_id,
@@ -452,8 +466,41 @@ func (repo *AttemptRepository) SaveAnswer(ctx context.Context, userID string, at
 			&attemptAnswer.UpdatedAt,
 		)
 
+	if errors.Is(err, pgx.ErrNoRows) {
+		const existingAnswerQuery = `
+			SELECT id, quiz_attempt_id, quiz_question_id, quiz_answer_option_id, updated_at
+			FROM attempt_answers
+			WHERE quiz_attempt_id = $1 AND quiz_question_id = $2;
+		`
+		err = tx.QueryRow(ctx, existingAnswerQuery, attemptID, quizQuestionID).Scan(
+			&attemptAnswer.ID,
+			&attemptAnswer.QuizAttemptID,
+			&attemptAnswer.QuizQuestionID,
+			&attemptAnswer.QuizAnswerOptionID,
+			&attemptAnswer.UpdatedAt,
+		)
+		if err == nil && attemptAnswer.QuizAnswerOptionID != optionID {
+			return nil, ErrAnswerLocked
+		}
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("save answer: %w", err)
+	}
+
+	const feedbackQuery = `
+		SELECT
+			COALESCE(BOOL_OR(id = $2 AND is_correct), FALSE),
+			COALESCE(ARRAY_AGG(id::text ORDER BY position) FILTER (WHERE is_correct), '{}')
+		FROM quiz_answer_options
+		WHERE quiz_question_id = $1;
+	`
+
+	if err := tx.QueryRow(ctx, feedbackQuery, quizQuestionID, optionID).Scan(
+		&attemptAnswer.IsCorrect,
+		&attemptAnswer.CorrectOptionIDs,
+	); err != nil {
+		return nil, fmt.Errorf("load answer feedback: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

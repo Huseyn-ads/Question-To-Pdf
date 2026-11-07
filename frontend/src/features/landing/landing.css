@@ -1,0 +1,426 @@
+/*
+ * Landing page 3D: CSS transforms only (no WebGL), so the page stays light
+ * and every surface uses the theme tokens in light and dark mode.
+ * Motion stops under prefers-reduced-motion.
+ */
+
+/* ── Hero scene: a tilted stack of study cards ────────────────────────────── */
+.tb-scene {
+  --rx: 0deg;
+  --ry: 0deg;
+  position: relative;
+  perspective: 1400px;
+  perspective-origin: 50% 40%;
+  aspect-ratio: 1 / 0.92;
+  width: 100%;
+  max-width: 34rem;
+  margin-inline: auto;
+  container-type: inline-size;
+}
+
+.tb-rig {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(calc(14deg + var(--rx))) rotateY(calc(-20deg + var(--ry))) rotateZ(2deg);
+  transition: transform 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation: tb-float 7s ease-in-out infinite;
+}
+
+.tb-scene[data-active='true'] .tb-rig {
+  transition-duration: 120ms;
+}
+
+@keyframes tb-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -10px;
+  }
+}
+
+.tb-layer {
+  position: absolute;
+  transform-style: preserve-3d;
+  border-radius: 1.1rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.5) inset,
+    0 30px 60px -28px rgb(53 47 41 / 0.45),
+    0 12px 24px -16px rgb(53 47 41 / 0.3);
+}
+
+:root[data-theme='dark'] .tb-layer {
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.04) inset,
+    0 30px 60px -24px rgb(0 0 0 / 0.75),
+    0 12px 24px -14px rgb(0 0 0 / 0.6);
+}
+
+/* Card thickness: a darker slab right under each card. */
+.tb-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--color-sunken);
+  border: 1px solid var(--color-line);
+  transform: translateZ(-7px);
+}
+
+.tb-file {
+  top: 0;
+  left: -2%;
+  width: 52%;
+  padding: 4.2cqi;
+  transform: translateZ(-70px) rotateZ(-6deg);
+}
+
+.tb-question {
+  top: 21%;
+  left: 19%;
+  width: 68%;
+  padding: 4.4cqi 4.4cqi 3.8cqi;
+  transform: translateZ(30px);
+}
+
+.tb-result {
+  right: 0;
+  bottom: 2%;
+  width: 34%;
+  padding: 3.6cqi;
+  transform: translateZ(120px) rotateZ(4deg);
+  text-align: center;
+}
+
+.tb-chip {
+  position: absolute;
+  top: 6%;
+  right: 4%;
+  transform: translateZ(170px);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  background: var(--color-forest);
+  color: var(--color-on-forest);
+  font-size: max(0.72rem, 2.6cqi);
+  font-weight: 600;
+  box-shadow: 0 18px 34px -16px rgb(47 81 65 / 0.8);
+  animation: tb-bob 5s ease-in-out infinite;
+}
+
+.tb-timer {
+  position: absolute;
+  left: 6%;
+  bottom: 14%;
+  transform: translateZ(90px);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: max(0.72rem, 2.6cqi);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 16px 30px -18px rgb(53 47 41 / 0.55);
+  animation: tb-bob 6s ease-in-out 1.2s infinite;
+}
+
+@keyframes tb-bob {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -8px;
+  }
+}
+
+/* Floor shadow that follows the stack. */
+.tb-floor {
+  position: absolute;
+  left: 12%;
+  right: 6%;
+  bottom: -4%;
+  height: 14%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(53 47 41 / 0.22), transparent);
+  filter: blur(8px);
+  animation: tb-shadow 7s ease-in-out infinite;
+}
+
+:root[data-theme='dark'] .tb-floor {
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.6), transparent);
+}
+
+@keyframes tb-shadow {
+  0%,
+  100% {
+    scale: 1;
+    opacity: 1;
+  }
+  50% {
+    scale: 0.92;
+    opacity: 0.75;
+  }
+}
+
+/* The right option lights up, then the verdict appears: a short loop. */
+.tb-option {
+  display: flex;
+  align-items: center;
+  gap: 2.4cqi;
+  padding: 1.7cqi 2.2cqi;
+  border-radius: 0.7rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  font-size: max(0.72rem, 2.7cqi);
+  color: var(--color-ink);
+}
+
+.tb-option-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: max(1.3rem, 5cqi);
+  height: max(1.3rem, 5cqi);
+  border-radius: 50%;
+  border: 1px solid var(--color-control);
+  font-size: max(0.62rem, 2.2cqi);
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.tb-option[data-right='true'] {
+  animation: tb-pick 6s ease-in-out infinite;
+}
+
+.tb-option[data-right='true'] .tb-option-mark {
+  animation: tb-pick-mark 6s ease-in-out infinite;
+}
+
+.tb-verdict {
+  opacity: 0;
+  animation: tb-verdict 6s ease-in-out infinite;
+}
+
+@keyframes tb-pick {
+  0%,
+  22% {
+    border-color: var(--color-line);
+    background: var(--color-surface);
+  }
+  30%,
+  90% {
+    border-color: var(--color-forest);
+    background: var(--color-forest-tint);
+  }
+  100% {
+    border-color: var(--color-line);
+    background: var(--color-surface);
+  }
+}
+
+@keyframes tb-pick-mark {
+  0%,
+  22% {
+    background: transparent;
+    color: var(--color-ink-muted);
+    border-color: var(--color-control);
+  }
+  30%,
+  90% {
+    background: var(--color-forest);
+    color: var(--color-on-forest);
+    border-color: var(--color-forest);
+  }
+  100% {
+    background: transparent;
+    color: var(--color-ink-muted);
+    border-color: var(--color-control);
+  }
+}
+
+@keyframes tb-verdict {
+  0%,
+  34% {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  42%,
+  88% {
+    opacity: 1;
+    translate: 0 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ── 3D book in the closing call to action ───────────────────────────────── */
+.tb-book-stage {
+  perspective: 900px;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.tb-book {
+  --w: 9.5rem;
+  --h: 12.5rem;
+  --d: 2.4rem;
+  position: relative;
+  width: var(--w);
+  height: var(--h);
+  transform-style: preserve-3d;
+  animation: tb-book-turn 9s ease-in-out infinite alternate, tb-float 6s ease-in-out infinite;
+}
+
+.tb-book > div {
+  position: absolute;
+  backface-visibility: hidden;
+}
+
+.tb-book-front,
+.tb-book-back {
+  inset: 0;
+  border-radius: 0.3rem 0.9rem 0.9rem 0.3rem;
+}
+
+.tb-book-front {
+  transform: translateZ(calc(var(--d) / 2));
+  background:
+    linear-gradient(90deg, rgb(0 0 0 / 0.18) 0 7%, rgb(255 255 255 / 0.08) 7% 8.5%, transparent 8.5%),
+    #b5643f;
+  color: #fffcf6;
+  padding: 1.4rem 1.1rem 1.2rem 1.6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
+}
+
+.tb-book-back {
+  transform: rotateY(180deg) translateZ(calc(var(--d) / 2));
+  background: #9c5434;
+}
+
+.tb-book-spine {
+  top: 0;
+  left: calc(50% - var(--d) / 2);
+  width: var(--d);
+  height: var(--h);
+  transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
+  background: linear-gradient(90deg, #8f4b2d, #a35a37 50%, #8f4b2d);
+  border-radius: 0.3rem;
+}
+
+.tb-book-pages {
+  top: 0.35rem;
+  left: calc(50% - var(--d) / 2);
+  width: calc(var(--d) - 0.2rem);
+  height: calc(var(--h) - 0.7rem);
+  transform: rotateY(90deg) translateZ(calc(var(--w) / 2 - 0.35rem));
+  background: repeating-linear-gradient(90deg, #f3ecdf 0 2px, #e2d7c4 2px 3px);
+}
+
+.tb-book-top,
+.tb-book-bottom {
+  left: 0.2rem;
+  width: calc(var(--w) - 0.55rem);
+  height: calc(var(--d) - 0.2rem);
+  top: calc(50% - var(--d) / 2);
+  background: repeating-linear-gradient(0deg, #f3ecdf 0 2px, #e2d7c4 2px 3px);
+}
+
+.tb-book-top {
+  transform: rotateX(90deg) translateZ(calc(var(--h) / 2 - 0.35rem));
+}
+
+.tb-book-bottom {
+  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2 - 0.35rem));
+}
+
+.tb-book-ribbon {
+  position: absolute;
+  top: 0;
+  right: 1.4rem;
+  width: 0.85rem;
+  height: 3.3rem;
+  background: #2f5141;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 82%, 0 100%);
+}
+
+.tb-book-shadow {
+  position: absolute;
+  bottom: -2.2rem;
+  left: 50%;
+  width: 10rem;
+  height: 1.6rem;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.35), transparent);
+  filter: blur(4px);
+  animation: tb-shadow 6s ease-in-out infinite;
+}
+
+@keyframes tb-book-turn {
+  from {
+    rotate: y -38deg;
+  }
+  to {
+    rotate: y 28deg;
+  }
+}
+
+/* ── Soft background shapes (no gradients across the page) ───────────────── */
+.tb-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+}
+
+.tb-dots {
+  background-image: radial-gradient(var(--color-line) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse at 70% 40%, black 10%, transparent 70%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-rig,
+  .tb-chip,
+  .tb-timer,
+  .tb-floor,
+  .tb-book,
+  .tb-book-shadow,
+  .tb-option[data-right='true'],
+  .tb-option[data-right='true'] .tb-option-mark,
+  .tb-verdict {
+    animation: none !important;
+  }
+  .tb-verdict {
+    opacity: 1;
+  }
+  .tb-option[data-right='true'] {
+    border-color: var(--color-forest);
+    background: var(--color-forest-tint);
+  }
+  .tb-option[data-right='true'] .tb-option-mark {
+    background: var(--color-forest);
+    color: var(--color-on-forest);
+    border-color: var(--color-forest);
+  }
+  .tb-book {
+    rotate: y -24deg;
+  }
+}

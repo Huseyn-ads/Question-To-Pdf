@@ -65,11 +65,14 @@ export function getSessionEndReason(queryClient: QueryClient): SessionEndReason 
 // ── Safe return URLs ────────────────────────────────────────────────────────
 const AUTH_PATHS = ['/login', '/register', '/check-email', '/auth/']
 
+/** Where a signed-in user lands by default. `/` is the public landing page. */
+export const APP_HOME = '/dashboard'
+
 /**
  * Accepts only same-origin app paths. Rejects absolute and protocol-relative
  * URLs (`//evil`, `/\evil`), backend routes and the auth pages themselves.
  */
-export function safeNext(raw: string | null | undefined, fallback = '/'): string {
+export function safeNext(raw: string | null | undefined, fallback = APP_HOME): string {
   if (!raw || raw.length > 2048) return fallback
   if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return fallback
   if ([...raw].some((char) => char.charCodeAt(0) < 0x20)) return fallback
@@ -81,6 +84,8 @@ export function safeNext(raw: string | null | undefined, fallback = '/'): string
   }
   if (url.origin !== 'http://app.invalid') return fallback
   const path = url.pathname
+  // After signing in, the landing page is not a destination: open the app.
+  if (path === '/') return fallback
   if (path.startsWith('/v1/') || path === '/v1' || path === '/health' || path === '/ready') return fallback
   if (AUTH_PATHS.some((prefix) => path === prefix || path.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`)))
     return fallback
@@ -89,7 +94,7 @@ export function safeNext(raw: string | null | undefined, fallback = '/'): string
 
 export function loginPath(next?: string) {
   const target = next ? safeNext(next, '') : ''
-  return target && target !== '/' ? `/login?next=${encodeURIComponent(target)}` : '/login'
+  return target && target !== APP_HOME ? `/login?next=${encodeURIComponent(target)}` : '/login'
 }
 
 // Google sign-in leaves the SPA, so the return path survives in sessionStorage.
@@ -109,6 +114,6 @@ export function takeRememberedNext(): string {
     sessionStorage.removeItem(NEXT_KEY)
     return safeNext(value)
   } catch {
-    return '/'
+    return APP_HOME
   }
 }

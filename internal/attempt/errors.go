@@ -9,4 +9,5 @@ var (
 	ErrAnswerTargetNotFound = errors.New("answer target not found")
 	ErrInvalidOptionID      = errors.New("invalid option id")
 	ErrAttemptInProgress    = errors.New("attempt is still in progress")
+	ErrAnswerLocked         = errors.New("question already answered")
 )

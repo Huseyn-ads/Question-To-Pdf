@@ -50,6 +50,11 @@ type AttemptAnswer struct {
 	QuizQuestionID     string
 	QuizAnswerOptionID string
 	UpdatedAt          time.Time
+	// IsCorrect reports whether the chosen option is marked correct.
+	IsCorrect bool
+	// CorrectOptionIDs lists every correct option of the question in display
+	// order. It can be empty when the source question had no answer key.
+	CorrectOptionIDs []string
 }
 
 type AttemptResult struct {

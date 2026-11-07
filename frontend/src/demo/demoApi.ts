@@ -68,6 +68,13 @@ function quizQuestions(quizId: string, count: number): SnapshotQuestion[] {
 
 const optionId = (quizId: string, q: number, o: number) => `${quizId}-q${q}-o${o + 1}`
 
+/** Same verdict the backend returns with every answer. */
+function feedback(questionId: string, chosen: string) {
+  const index = Number(questionId.slice(questionId.lastIndexOf('-q') + 2)) - 1
+  const right = `${questionId}-o${(demoQuestionPool[index]?.correct ?? 0) + 1}`
+  return { is_correct: chosen === right, correct_option_ids: [right] }
+}
+
 function seedState(settings: DemoSettings): DemoState {
   const now = Date.now()
   const algoStart = settings.scenario === 'short' ? now - minutes(24) : now - minutes(6)
@@ -94,7 +101,7 @@ function seedState(settings: DemoSettings): DemoState {
               'quiz-algo-q1': pick('quiz-algo', 1, true),
               'quiz-algo-q2': pick('quiz-algo', 2, true),
               'quiz-algo-q3': pick('quiz-algo', 3, false),
-              'quiz-algo-q5': pick('quiz-algo', 5, true),
+              'quiz-algo-q4': pick('quiz-algo', 4, true),
             },
           },
           {
@@ -199,6 +206,7 @@ function details(a: StoredAttempt): AttemptDetails {
       id: `ans-${qid}`,
       quiz_question_id: qid,
       quiz_answer_option_id: oid,
+      ...feedback(qid, oid),
     })),
   }
 }
@@ -346,9 +354,18 @@ export const demoApi: Api = {
       if (a.status !== 'in_progress' || isPastDeadline(a)) {
         throw new ApiError({ kind: 'conflict', status: 409, serverMessage: 'attempt is closed' })
       }
+      const saved = a.answers[quizQuestionId]
+      if (saved && saved !== optionIdValue) {
+        throw new ApiError({ kind: 'answer_locked', status: 409, serverMessage: 'question already answered' })
+      }
       a.answers[quizQuestionId] = optionIdValue
       persist()
-      return { quiz_question_id: quizQuestionId, option_id: optionIdValue, updated_at: new Date().toISOString() }
+      return {
+        quiz_question_id: quizQuestionId,
+        option_id: optionIdValue,
+        updated_at: new Date().toISOString(),
+        ...feedback(quizQuestionId, optionIdValue),
+      }
     },
     finish: async (attemptId) => {
       await wait(500)

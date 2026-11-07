@@ -275,7 +275,7 @@ function ReviewCard({ item }: { item: ReviewItem }) {
               <span
                 className={cn(
                   'grid size-6 shrink-0 place-items-center rounded-sm text-xs font-semibold',
-                  correct ? 'bg-forest text-surface' : selected ? 'bg-terracotta-ink text-surface' : 'bg-sunken text-ink-muted',
+                  correct ? 'bg-forest text-on-forest' : selected ? 'bg-terracotta-ink text-on-forest' : 'bg-sunken text-ink-muted',
                 )}
                 aria-hidden
               >

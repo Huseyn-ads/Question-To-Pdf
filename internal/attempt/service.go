@@ -84,6 +84,9 @@ func (s *AttemptService) SaveAnswer(ctx context.Context, userID string, attemptI
 		case errors.Is(err, ErrAttemptClosed):
 			return nil, ErrAttemptClosed
 
+		case errors.Is(err, ErrAnswerLocked):
+			return nil, ErrAnswerLocked
+
 		default:
 			return nil, fmt.Errorf("save answer: %w", err)
 		}

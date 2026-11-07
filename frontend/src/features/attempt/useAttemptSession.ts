@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useApi } from '@/api/context'
 import { isApiError, isTransient } from '@/api/errors'
 import { queryKeys } from '@/api/queryKeys'
 import type { AttemptDetails, AttemptResult } from '@/api/types'
-import { AnswerSaver } from './answerSaver'
+import { answersFromServer, nextIndex, resumeIndex, sendWithRetry, tally, type AnswerMap } from './attemptFlow'
 import { useCountdown } from './useCountdown'
 
 export type AttemptPhase =
@@ -17,17 +17,30 @@ export type AttemptPhase =
   | 'finishing'
   | 'finished'
 
-export type FinishOutcome =
-  | { ok: true; result: AttemptResult }
-  | { ok: false; reason: 'unsaved'; failed: string[] }
-  | { ok: false; reason: 'error'; error: unknown }
+/** The answer being sent right now, or the one whose sending failed. */
+export interface PendingAnswer {
+  questionId: string
+  optionId: string
+  status: 'sending' | 'error'
+  error?: unknown
+}
 
+export type FinishOutcome = { ok: true; result: AttemptResult } | { ok: false; error: unknown }
+
+/**
+ * One attempt in "check as you go" mode: every choice is sent at once, is
+ * final, and comes back with the right answer. Questions are shown one by one
+ * in order; there is no jumping between them.
+ */
 export function useAttemptSession(attemptId: string) {
   const api = useApi()
   const queryClient = useQueryClient()
   const [closedByServer, setClosedByServer] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [finished, setFinished] = useState(false)
+  const [local, setLocal] = useState<AnswerMap>({})
+  const [pending, setPending] = useState<PendingAnswer | null>(null)
+  const [cursor, setCursor] = useState<number | null>(null)
 
   const query = useQuery({
     queryKey: queryKeys.attempt(attemptId),
@@ -37,28 +50,25 @@ export function useAttemptSession(attemptId: string) {
     retry: (count, error) => isTransient(error) && count < 2,
   })
   const attempt: AttemptDetails | undefined = query.data
-  const receivedAt = query.dataUpdatedAt
+  const questions = useMemo(() => attempt?.questions ?? [], [attempt])
 
-  // One saver per attempt for the lifetime of the page (the route remounts per attempt).
-  const [saver] = useState(
-    () =>
-      new AnswerSaver(
-        async (questionId, optionId) => {
-          await api.attempts.saveAnswer(attemptId, questionId, optionId)
-        },
-        { onClosed: () => setClosedByServer(true) },
-      ),
+  // Server answers (after reload or a sync) plus the ones confirmed here.
+  const answers = useMemo<AnswerMap>(
+    () => ({ ...answersFromServer(attempt?.answers ?? []), ...local }),
+    [attempt, local],
   )
-  const saves = useSyncExternalStore(saver.subscribe, saver.getSnapshot)
 
-  // Seed and re-seed server answers (after reload / tab return).
-  useEffect(() => {
-    if (!attempt) return
-    saver.seed(Object.fromEntries(attempt.answers.map((a) => [a.quiz_question_id, a.quiz_answer_option_id])))
-  }, [attempt, saver])
+  // Pin the student to the first unanswered question once data arrives. The
+  // cursor then moves only on "Next", so an answered question keeps showing
+  // its verdict until the student moves on.
+  if (attempt && cursor === null) setCursor(resumeIndex(questions, answers))
+  const index = cursor ?? 0
+  const question = questions[index]
+  const current = question ? answers[question.id] : undefined
+  const upcoming = attempt ? nextIndex(questions, answers, index) : null
+  const counts = tally(questions, answers)
 
-  const remaining = useCountdown(attempt?.deadline_at, attempt?.server_time, receivedAt)
-
+  const remaining = useCountdown(attempt?.deadline_at, attempt?.server_time, query.dataUpdatedAt)
   const serverSaysClosed = attempt ? attempt.status !== 'in_progress' : false
   const deadlinePassed = attempt?.deadline_at != null && remaining === 0
 
@@ -74,10 +84,6 @@ export function useAttemptSession(attemptId: string) {
             ? 'expired'
             : 'active'
 
-  useEffect(() => {
-    if (phase === 'closed' || phase === 'expired') saver.stop()
-  }, [phase, saver])
-
   // Sync with the server whenever the tab becomes visible again.
   const { refetch } = query
   useEffect(() => {
@@ -92,29 +98,69 @@ export function useAttemptSession(attemptId: string) {
     }
   }, [refetch])
 
-  // Warn before leaving while a save is still pending.
+  // Warn before leaving while an answer is still on its way.
+  const sending = pending?.status === 'sending'
   useEffect(() => {
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (saver.hasPending()) event.preventDefault()
-    }
+    if (!sending) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [saver])
+  }, [sending])
 
-  const selections = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const answer of attempt?.answers ?? []) map[answer.quiz_question_id] = answer.quiz_answer_option_id
-    for (const [questionId, state] of Object.entries(saves.questions)) map[questionId] = state.optionId
-    return map
-  }, [attempt, saves])
-
-  const select = useCallback(
-    (questionId: string, optionId: string) => {
-      if (phase !== 'active') return
-      saver.select(questionId, optionId)
+  const busy = useRef(false)
+  const send = useCallback(
+    async (questionId: string, optionId: string) => {
+      if (busy.current) return
+      busy.current = true
+      setPending({ questionId, optionId, status: 'sending' })
+      try {
+        const saved = await sendWithRetry(() => api.attempts.saveAnswer(attemptId, questionId, optionId))
+        setLocal((prev) => ({
+          ...prev,
+          [questionId]: {
+            optionId: saved.option_id,
+            is_correct: saved.is_correct,
+            correct_option_ids: saved.correct_option_ids ?? [],
+          },
+        }))
+        setPending(null)
+      } catch (error) {
+        if (isApiError(error, 'answer_locked')) {
+          // Answered in another tab: show what the server has.
+          setPending(null)
+          void refetch()
+        } else if (isApiError(error, 'conflict')) {
+          setPending(null)
+          setClosedByServer(true)
+        } else {
+          setPending({ questionId, optionId, status: 'error', error })
+        }
+      } finally {
+        busy.current = false
+      }
     },
-    [phase, saver],
+    [api, attemptId, refetch],
   )
+
+  /** Choose an option: sent at once and final. */
+  const choose = useCallback(
+    (optionId: string) => {
+      if (phase !== 'active' || !question || answers[question.id] || pending) return
+      void send(question.id, optionId)
+    },
+    [answers, pending, phase, question, send],
+  )
+
+  /** Re-send the failed choice (the same option: a different one could clash). */
+  const retry = useCallback(() => {
+    if (pending?.status === 'error' && phase === 'active') void send(pending.questionId, pending.optionId)
+  }, [pending, phase, send])
+
+  const goNext = useCallback(() => {
+    if (!current || upcoming === null) return false
+    setCursor(upcoming)
+    return true
+  }, [current, upcoming])
 
   const finishMutation = useMutation({
     mutationFn: () => api.attempts.finish(attemptId),
@@ -122,49 +168,42 @@ export function useAttemptSession(attemptId: string) {
   })
   const { mutateAsync: finishAsync } = finishMutation
 
-  const finish = useCallback(
-    async ({ ignoreUnsaved = false }: { ignoreUnsaved?: boolean } = {}): Promise<FinishOutcome> => {
-      setFinishing(true)
-      try {
-        const { failed } = await saver.flush()
-        if (failed.length && !ignoreUnsaved) {
-          setFinishing(false)
-          return { ok: false, reason: 'unsaved', failed }
-        }
-        saver.stop()
-        const result = await finishAsync()
-        queryClient.setQueryData(queryKeys.result(attemptId), result)
-        void queryClient.invalidateQueries({ queryKey: ['quizzes', 'history'] })
-        void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard })
-        setFinished(true)
-        return { ok: true, result }
-      } catch (error) {
-        setFinishing(false)
-        if (isApiError(error, 'conflict')) setClosedByServer(true)
-        return { ok: false, reason: 'error', error }
-      }
-    },
-    [attemptId, finishAsync, queryClient, saver],
-  )
-
-  const questionIndexById = useMemo(() => {
-    const map = new Map<string, number>()
-    attempt?.questions.forEach((q, index) => map.set(q.id, index))
-    return map
-  }, [attempt])
+  const finish = useCallback(async (): Promise<FinishOutcome> => {
+    setFinishing(true)
+    try {
+      const result = await finishAsync()
+      queryClient.setQueryData(queryKeys.result(attemptId), result)
+      void queryClient.invalidateQueries({ queryKey: ['quizzes', 'history'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard })
+      setFinished(true)
+      return { ok: true, result }
+    } catch (error) {
+      setFinishing(false)
+      if (isApiError(error, 'conflict')) setClosedByServer(true)
+      return { ok: false, error }
+    }
+  }, [attemptId, finishAsync, queryClient])
 
   return {
     query,
     attempt,
     phase,
     remaining,
-    selections,
-    saves,
-    select,
-    retryFailed: () => saver.retryFailed(),
+    questions,
+    index,
+    question,
+    /** Verdict for the question on screen, once answered. */
+    current,
+    /** Where "Next" leads; null on the last open question. */
+    upcoming,
+    counts,
+    pending: pending && question && pending.questionId === question.id ? pending : null,
+    choose,
+    retry,
+    goNext,
     finish,
+    finishPending: finishMutation.isPending,
     finishError: finishMutation.error,
-    questionIndexById,
   }
 }
 

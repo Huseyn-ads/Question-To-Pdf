@@ -22,7 +22,7 @@ export default defineConfig([
   },
   {
     // shadcn/ui primitives and context modules export helpers next to components.
-    files: ['src/components/ui/**', 'src/i18n/**', 'src/api/context.tsx', 'src/app/paths.tsx', 'src/components/common/**'],
+    files: ['src/components/ui/**', 'src/i18n/**', 'src/theme/**', 'src/api/context.tsx', 'src/app/paths.tsx', 'src/components/common/**'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
 ])

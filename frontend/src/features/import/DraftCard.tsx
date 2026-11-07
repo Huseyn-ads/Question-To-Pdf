@@ -125,7 +125,7 @@ export const DraftCard = memo(function DraftCard({
                         className={cn(
                           'grid size-7 shrink-0 cursor-pointer place-items-center rounded-sm text-xs font-semibold',
                           'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-forest',
-                          option.is_correct ? 'bg-forest text-surface' : 'border border-control/70 bg-surface text-ink-muted',
+                          option.is_correct ? 'bg-forest text-on-forest' : 'border border-control/70 bg-surface text-ink-muted',
                         )}
                       >
                         <input

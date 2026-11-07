@@ -1,12 +1,12 @@
 import { NavLink, Outlet } from 'react-router'
-import { LogOut, Shapes } from 'lucide-react'
+import { Check, Home, Languages, LogOut, Monitor, Moon, Sun } from 'lucide-react'
 import { useLogout } from '@/features/auth/useLogout'
 import { useMe } from '@/features/auth/session'
 import { usePaths } from '@/app/paths'
-import { useT } from '@/i18n'
+import { LOCALES, useI18n, useT } from '@/i18n'
+import { useTheme } from '@/theme/theme'
 import { cn } from '@/lib/utils'
 import { Logo } from '@/components/brand/Logo'
-import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,7 +15,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { mainNav, tools } from './navigation'
+import { mainNav } from './navigation'
+import { Preferences } from './Preferences'
 
 function initials(name: string) {
   return (
@@ -29,7 +30,9 @@ function initials(name: string) {
 }
 
 function UserMenu({ variant }: { variant: 'sidebar' | 'header' }) {
-  const t = useT()
+  const { t, locale, setLocale } = useI18n()
+  const { preference, setPreference } = useTheme()
+  const paths = usePaths()
   const { data: user } = useMe()
   const logout = useLogout()
   const name = user?.name ?? ''
@@ -54,6 +57,62 @@ function UserMenu({ variant }: { variant: 'sidebar' | 'header' }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align={variant === 'sidebar' ? 'start' : 'end'} className="w-60">
         <DropdownMenuLabel className="truncate font-normal text-ink-muted">{user?.email}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <NavLink to={paths.home}>
+            <Home aria-hidden />
+            {t.nav.home}
+          </NavLink>
+        </DropdownMenuItem>
+        {/* On phones the header has no room for the switches: they live here. */}
+        {variant === 'header' && (
+          <div className="sm:hidden">
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="flex items-center gap-2 font-normal text-ink-muted">
+              <Languages className="size-4" aria-hidden />
+              {t.settings.language}
+            </DropdownMenuLabel>
+            {LOCALES.map((code) => (
+              <DropdownMenuItem
+                key={code}
+                lang={code}
+                role="menuitemradio"
+                aria-checked={locale === code}
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setLocale(code)
+                }}
+              >
+                <span className="w-4 text-xs font-semibold uppercase">{code}</span>
+                {code === 'az' ? 'Azərbaycanca' : 'Русский'}
+                {locale === code && <Check className="ml-auto text-forest" aria-hidden />}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="font-normal text-ink-muted">{t.settings.theme}</DropdownMenuLabel>
+            {(
+              [
+                ['light', Sun, t.settings.themeLight],
+                ['dark', Moon, t.settings.themeDark],
+                ['system', Monitor, t.settings.themeSystem],
+              ] as const
+            ).map(([value, Icon, label]) => (
+              <DropdownMenuItem
+                key={value}
+                role="menuitemradio"
+                aria-checked={preference === value}
+                onSelect={(event) => {
+                  event.preventDefault()
+                  setPreference(value)
+                }}
+              >
+                <Icon aria-hidden />
+                {label}
+                {preference === value && <Check className="ml-auto text-forest" aria-hidden />}
+              </DropdownMenuItem>
+            ))}
+          </div>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           disabled={logout.isPending}
@@ -82,7 +141,7 @@ function Sidebar() {
   const t = useT()
   const paths = usePaths()
   return (
-    <aside className="sticky top-0 z-30 hidden h-dvh w-sidebar shrink-0 flex-col border-r border-line bg-[#EFE8DC] lg:flex">
+    <aside className="sticky top-0 z-30 hidden h-dvh w-sidebar shrink-0 flex-col border-r border-line bg-rail lg:flex">
       <div className="flex h-18 items-center px-5">
         <NavLink to={paths.dashboard} className="rounded-md" aria-label={t.meta.appName}>
           <Logo />
@@ -99,37 +158,9 @@ function Sidebar() {
             </li>
           ))}
         </ul>
-        <div>
-          <p className="px-3 pb-2 text-xs font-semibold tracking-wide text-ink-subtle uppercase">
-            {t.nav.tools}
-          </p>
-          <ul className="flex flex-col gap-1">
-            {tools(t, paths).map((tool) =>
-              tool.to ? (
-                <li key={tool.key}>
-                  <NavLink to={tool.to} className={navLinkClass}>
-                    <tool.icon className="size-[1.125rem]" aria-hidden />
-                    {tool.shortTitle}
-                  </NavLink>
-                </li>
-              ) : (
-                <li
-                  key={tool.key}
-                  className="flex h-10 items-center gap-3 rounded-md px-3 text-[0.9375rem] text-ink-subtle"
-                  aria-disabled="true"
-                >
-                  <tool.icon className="size-[1.125rem]" aria-hidden />
-                  <span className="truncate">{tool.shortTitle}</span>
-                  <Badge tone="outline" className="ml-auto">
-                    {t.common.soon}
-                  </Badge>
-                </li>
-              ),
-            )}
-          </ul>
-        </div>
       </nav>
-      <div className="border-t border-line p-3">
+      <div className="flex flex-col gap-2 border-t border-line p-3">
+        <Preferences className="px-2 pt-1" />
         <UserMenu variant="sidebar" />
       </div>
     </aside>
@@ -159,13 +190,14 @@ function TopBar() {
                     )
                   }
                 >
-                  {item.label}
+                  {item.shortLabel ?? item.label}
                 </NavLink>
               </li>
             ))}
           </ul>
         </nav>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Preferences className="hidden sm:flex" />
           <UserMenu variant="header" />
         </div>
       </div>
@@ -176,10 +208,7 @@ function TopBar() {
 function BottomNav() {
   const t = useT()
   const paths = usePaths()
-  const items = [
-    ...mainNav(t, paths),
-    { key: 'tools', label: t.nav.tools, shortLabel: undefined, icon: Shapes, to: paths.importDocx, end: false },
-  ]
+  const items = mainNav(t, paths)
   return (
     <nav
       aria-label={t.nav.main}
@@ -225,7 +254,7 @@ export function AppShell() {
     <div className="min-h-dvh lg:flex">
       <a
         href="#main"
-        className="sr-only z-50 rounded-md bg-forest px-4 py-2 text-surface focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+        className="sr-only z-50 rounded-md bg-forest px-4 py-2 text-on-forest focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
       >
         {t.nav.skipToContent}
       </a>

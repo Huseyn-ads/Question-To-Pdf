@@ -1,44 +1,53 @@
-import { forwardRef, type ReactNode } from 'react'
-import { Check } from 'lucide-react'
+import { forwardRef } from 'react'
+import { Check, LoaderCircle, X } from 'lucide-react'
 import type { SnapshotQuestion } from '@/api/types'
 import { useT } from '@/i18n'
 import { cn } from '@/lib/utils'
+import type { CheckedAnswer } from './attemptFlow'
 import { optionLetter } from './optionLetter'
 import { splitQuestionText } from './questionText'
-
 
 interface QuestionViewProps {
   question: SnapshotQuestion
   number: number
   total: number
-  selectedOptionId: string | undefined
+  /** Verdict once the question is answered. */
+  answer: CheckedAnswer | undefined
+  /** Option being sent right now. */
+  sendingId: string | undefined
   disabled: boolean
-  onSelect: (optionId: string) => void
-  status?: ReactNode
+  onChoose: (optionId: string) => void
 }
 
+type OptionState = 'idle' | 'sending' | 'chosen-right' | 'chosen-wrong' | 'right' | 'rest'
+
 /**
- * One question with native radio inputs (arrow keys move between options,
- * Space selects). Text keeps the document's line breaks for code and
- * matching tables.
+ * One question. Options are buttons, not radios: a choice is final, so arrow
+ * keys must never pick an answer by accident. Digits 1–9 work too (page level).
  */
 export const QuestionView = forwardRef<HTMLHeadingElement, QuestionViewProps>(function QuestionView(
-  { question, number, total, selectedOptionId, disabled, onSelect, status },
+  { question, number, total, answer, sendingId, disabled, onChoose },
   headingRef,
 ) {
   const t = useT()
   const headingId = `q-${question.id}-title`
   const contextId = `q-${question.id}-context`
   const { prompt, context, contextIsCode } = splitQuestionText(question.text)
+  const locked = disabled || Boolean(answer) || Boolean(sendingId)
+
+  const stateOf = (optionId: string): OptionState => {
+    if (!answer) return sendingId === optionId ? 'sending' : 'idle'
+    const isRight = answer.correct_option_ids.includes(optionId)
+    if (answer.optionId === optionId) return isRight ? 'chosen-right' : 'chosen-wrong'
+    return isRight ? 'right' : 'rest'
+  }
+
   return (
     <article aria-labelledby={headingId} aria-describedby={context ? contextId : undefined}>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <p className="text-sm font-semibold tracking-wide text-forest uppercase">
-          {t.attempt.questionLabel(number)}
-          <span className="font-normal tracking-normal text-ink-subtle normal-case"> / {total}</span>
-        </p>
-        {status}
-      </div>
+      <p className="mb-4 text-sm font-semibold tracking-wide text-forest uppercase">
+        {t.attempt.questionLabel(number)}
+        <span className="font-normal tracking-normal text-ink-subtle normal-case"> / {total}</span>
+      </p>
       <h2
         id={headingId}
         ref={headingRef}
@@ -61,51 +70,78 @@ export const QuestionView = forwardRef<HTMLHeadingElement, QuestionViewProps>(fu
         </div>
       )}
 
-      <fieldset className="mt-7" disabled={disabled}>
-        <legend className="sr-only">{t.attempt.optionsLabel}</legend>
-        <div className="flex flex-col gap-2.5">
-          {question.options.map((option, index) => {
-            const checked = option.id === selectedOptionId
-            return (
-              <label
-                key={option.id}
+      <ul className="mt-7 flex flex-col gap-2.5" aria-label={t.attempt.optionsLabel}>
+        {question.options.map((option, index) => {
+          const state = stateOf(option.id)
+          const letter = optionLetter(index)
+          const verdict =
+            state === 'chosen-right'
+              ? t.attempt.feedback.yourRight
+              : state === 'chosen-wrong'
+                ? t.attempt.feedback.yourWrong
+                : state === 'right'
+                  ? t.attempt.feedback.rightOption
+                  : null
+          return (
+            <li key={option.id}>
+              <button
+                type="button"
+                disabled={locked}
+                aria-disabled={locked || undefined}
+                onClick={() => onChoose(option.id)}
                 className={cn(
-                  'group relative flex cursor-pointer items-start gap-3.5 rounded-md border px-3.5 py-3 transition-[border-color,background-color] duration-150 sm:gap-4 sm:px-4 sm:py-3.5',
-                  'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-forest',
-                  checked
-                    ? 'border-forest bg-forest-tint'
-                    : 'border-line bg-surface hover:border-control/70 hover:bg-[#FBF7EF]',
-                  disabled && 'cursor-not-allowed opacity-70 hover:border-line hover:bg-surface',
+                  'group relative flex w-full items-start gap-3.5 rounded-md border px-3.5 py-3 text-left transition-[border-color,background-color,opacity] duration-200 sm:gap-4 sm:px-4 sm:py-3.5',
+                  state === 'idle' &&
+                    'border-line bg-surface enabled:cursor-pointer enabled:hover:border-control/70 enabled:hover:bg-hover disabled:opacity-70',
+                  state === 'sending' && 'border-forest bg-forest-tint',
+                  (state === 'chosen-right' || state === 'right') && 'border-forest bg-forest-tint',
+                  state === 'chosen-right' && 'ring-1 ring-forest',
+                  state === 'chosen-wrong' && 'border-terracotta bg-terracotta-soft ring-1 ring-terracotta',
+                  state === 'rest' && 'border-line-soft bg-surface opacity-60',
                 )}
               >
-                <input
-                  type="radio"
-                  name={`question-${question.id}`}
-                  value={option.id}
-                  checked={checked}
-                  onChange={() => onSelect(option.id)}
-                  className="peer sr-only"
-                />
                 <span
                   aria-hidden
                   className={cn(
                     'mt-px grid size-8 shrink-0 place-items-center rounded-full border text-sm font-semibold transition-colors',
-                    checked
-                      ? 'border-forest bg-forest text-surface'
-                      : 'border-control/60 bg-surface text-ink-muted group-hover:border-control',
+                    state === 'idle' && 'border-control/60 bg-surface text-ink-muted group-enabled:group-hover:border-control',
+                    state === 'sending' && 'border-forest bg-forest text-on-forest',
+                    (state === 'chosen-right' || state === 'right') && 'border-forest bg-forest text-on-forest',
+                    state === 'chosen-wrong' && 'border-terracotta-ink bg-terracotta-ink text-on-forest',
+                    state === 'rest' && 'border-line bg-surface text-ink-subtle',
                   )}
                 >
-                  {checked ? <Check className="size-4" strokeWidth={2.5} /> : optionLetter(index)}
+                  {state === 'sending' ? (
+                    <LoaderCircle className="size-4 animate-spin" />
+                  ) : state === 'chosen-wrong' ? (
+                    <X className="size-4" strokeWidth={2.5} />
+                  ) : state === 'chosen-right' || state === 'right' ? (
+                    <Check className="size-4" strokeWidth={2.5} />
+                  ) : (
+                    letter
+                  )}
                 </span>
-                <span className="min-w-0 flex-1 self-center text-reading whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
-                  <span className="sr-only">{optionLetter(index)}. </span>
-                  {option.text}
+                <span className="min-w-0 flex-1 self-center">
+                  <span className="block text-reading whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
+                    <span className="sr-only">{letter}. </span>
+                    {option.text}
+                  </span>
+                  {verdict && (
+                    <span
+                      className={cn(
+                        'mt-1 block text-sm font-medium',
+                        state === 'chosen-wrong' ? 'text-terracotta-ink' : 'text-forest',
+                      )}
+                    >
+                      {verdict}
+                    </span>
+                  )}
                 </span>
-              </label>
-            )
-          })}
-        </div>
-      </fieldset>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
     </article>
   )
 })

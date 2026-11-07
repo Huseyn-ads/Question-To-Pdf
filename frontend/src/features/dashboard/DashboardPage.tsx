@@ -14,12 +14,10 @@ import { queryKeys } from '@/api/queryKeys'
 import { usePaths } from '@/app/paths'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DeskIllustration } from '@/components/brand/Illustrations'
 import { EmptyState, ErrorState, ListSkeleton, Panel, SectionHeader } from '@/components/common/states'
-import { tools } from '@/components/layout/navigation'
 import { useCountdown } from '@/features/attempt/useCountdown'
 import { QuizRow } from '@/features/quizzes/QuizRow'
 import { useDashboardData, type DashboardQuiz } from './useDashboardData'
@@ -192,8 +190,7 @@ export function DashboardPage() {
           </section>
         </div>
 
-        <aside className="flex flex-col gap-8" aria-label={t.tools.sectionTitle}>
-          <ToolsPanel />
+        <aside className="flex flex-col gap-8" aria-label={t.tools.docxTip.title}>
           <DocxTip />
         </aside>
       </div>
@@ -255,48 +252,6 @@ function ContinueBanner({ item }: { item: DashboardQuiz }) {
           <ArrowRight aria-hidden />
         </Link>
       </Button>
-    </section>
-  )
-}
-
-function ToolsPanel() {
-  const { t } = useI18n()
-  const paths = usePaths()
-  return (
-    <section id="tools" aria-labelledby="tools-title">
-      <SectionHeader id="tools-title" title={t.tools.sectionTitle} hint={t.tools.sectionHint} />
-      <Panel className="divide-y divide-line-soft">
-        {tools(t, paths).map((tool) => {
-          const body = (
-            <>
-              <span
-                className={cn(
-                  'grid size-9 shrink-0 place-items-center rounded-md',
-                  tool.to ? 'bg-forest-soft text-forest' : 'bg-sunken text-ink-subtle',
-                )}
-              >
-                <tool.icon className="size-[1.125rem]" aria-hidden />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2">
-                  <span className={cn('font-medium', tool.to ? 'text-ink' : 'text-ink-muted')}>{tool.title}</span>
-                  {!tool.to && <Badge tone="outline">{t.common.soon}</Badge>}
-                </span>
-                <span className="mt-0.5 block text-sm leading-snug text-ink-subtle">{tool.description}</span>
-              </span>
-            </>
-          )
-          return tool.to ? (
-            <Link key={tool.key} to={tool.to} className="flex gap-3 p-4 hover:bg-forest-tint/60">
-              {body}
-            </Link>
-          ) : (
-            <div key={tool.key} className="flex gap-3 p-4" aria-disabled="true">
-              {body}
-            </div>
-          )
-        })}
-      </Panel>
     </section>
   )
 }

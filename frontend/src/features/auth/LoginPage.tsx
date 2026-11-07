@@ -31,6 +31,8 @@ export function LoginPage() {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const next = safeNext(searchParams.get('next'))
+  // Set by the backend when the Google callback fails (fixed reason codes).
+  const googleError = searchParams.get('google_error')
   const state = (location.state ?? {}) as LoginLocationState
   const me = useMe()
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
@@ -69,6 +71,16 @@ export function LoginPage() {
         <Alert tone="success" className="mb-6">
           <Info aria-hidden />
           <AlertDescription>{t.auth.loggedOut}</AlertDescription>
+        </Alert>
+      )}
+
+      {googleError && !login.isError && (
+        <Alert tone="danger" className="mb-6">
+          <AlertCircle aria-hidden />
+          <AlertTitle>{t.auth.googleErrorTitle}</AlertTitle>
+          <AlertDescription>
+            <p>{t.auth.googleErrors[googleError] ?? t.auth.googleErrors.failed}</p>
+          </AlertDescription>
         </Alert>
       )}
 

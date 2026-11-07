@@ -20,6 +20,7 @@ export function errorMessage(t: Messages, error: unknown): string {
     case 'not_found':
       return t.errors.notFound
     case 'conflict':
+    case 'answer_locked':
       return t.errors.conflict
     case 'validation':
       return t.errors.validation

@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
-	"html/template"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -19,6 +18,7 @@ import (
 	"time"
 
 	"qtp/internal/config"
+	"qtp/internal/locale"
 )
 
 type SMTP struct{ cfg config.MailConfig }
@@ -34,7 +34,7 @@ func (s *SMTP) SendVerification(ctx context.Context, to, link string, expires ti
 	if err != nil || address.Name != "" || address.Address != to {
 		return fmt.Errorf("invalid verification recipient")
 	}
-	message, err := buildMessage(s.cfg.From, to, link, expires)
+	message, err := buildMessage(s.cfg.From, to, link, expires, locale.FromContext(ctx))
 	if err != nil {
 		return fmt.Errorf("build verification message failed")
 	}
@@ -105,29 +105,16 @@ func (s *SMTP) SendVerification(ctx context.Context, to, link string, expires ti
 	return nil
 }
 
-var verificationTemplate = template.Must(template.New("email").Parse(`
-<!doctype html><html lang="ru"><body>
-<h1>Подтвердите email</h1>
-<p>Вы зарегистрировались в Question-To-Quiz.</p>
-<p><a href="{{.Link}}">Подтвердить email</a></p>
-<p>Ссылка действует до {{.Expires}} (UTC) и используется один раз.</p>
-<p>Если вы не регистрировались, проигнорируйте это письмо.</p>
-</body></html>`))
-
-func buildMessage(from, to, link string, expires time.Time) ([]byte, error) {
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	plain := "Подтвердите email для Question-To-Quiz:\r\n" + link +
-		"\r\nСсылка действует до " + expires.UTC().Format(time.RFC3339) +
-		". Если вы не регистрировались, проигнорируйте письмо.\r\n"
-	var html bytes.Buffer
-	data := struct{ Link, Expires string }{link, expires.UTC().Format(time.RFC3339)}
-	if err := verificationTemplate.Execute(&html, data); err != nil {
+func buildMessage(from, to, link string, expires time.Time, lang string) ([]byte, error) {
+	email, err := renderVerification(link, expires, time.Now(), lang)
+	if err != nil {
 		return nil, err
 	}
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
 	for _, part := range []struct{ kind, text string }{
-		{"text/plain; charset=utf-8", plain},
-		{"text/html; charset=utf-8", html.String()},
+		{"text/plain; charset=utf-8", email.Plain},
+		{"text/html; charset=utf-8", email.HTML},
 	} {
 		header := make(textproto.MIMEHeader)
 		header.Set("Content-Type", part.kind)
@@ -151,8 +138,9 @@ func buildMessage(from, to, link string, expires time.Time) ([]byte, error) {
 	if _, err := rand.Read(id[:]); err != nil {
 		return nil, err
 	}
-	headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@question-to-quiz.local>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=%q\r\n\r\n",
-		from, to, mime.QEncoding.Encode("utf-8", "Подтвердите email — Question-To-Quiz"),
-		time.Now().UTC().Format(time.RFC1123Z), hex.EncodeToString(id[:]), writer.Boundary())
+	sender := (&mail.Address{Name: brandName, Address: from}).String()
+	headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nMessage-ID: <%s@telebeland.local>\r\nContent-Language: %s\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=%q\r\n\r\n",
+		sender, to, mime.QEncoding.Encode("utf-8", email.Subject),
+		time.Now().UTC().Format(time.RFC1123Z), hex.EncodeToString(id[:]), email.Lang, writer.Boundary())
 	return append([]byte(headers), body.Bytes()...), nil
 }

@@ -8,6 +8,7 @@ export type ApiErrorKind =
   | 'not_found'
   | 'validation' // 400
   | 'conflict' // 409 (attempt closed, email taken, …)
+  | 'answer_locked' // 409 "question already answered": answers are final
   | 'too_large' // 413
   | 'unsupported' // 415
   | 'unprocessable' // 422 (broken / unsupported DOCX)
@@ -59,6 +60,7 @@ export function classify(status: number, message: string | undefined, context: R
     case 404:
       return 'not_found'
     case 409:
+      if (text.includes('already answered')) return 'answer_locked'
       return 'conflict'
     case 413:
       return 'too_large'

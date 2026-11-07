@@ -3,9 +3,11 @@ package attempt
 import "time"
 
 type SavedAnswer struct {
-	ID                 string `json:"id"`
-	QuizQuestionID     string `json:"quiz_question_id"`
-	QuizAnswerOptionID string `json:"quiz_answer_option_id"`
+	ID                 string   `json:"id"`
+	QuizQuestionID     string   `json:"quiz_question_id"`
+	QuizAnswerOptionID string   `json:"quiz_answer_option_id"`
+	IsCorrect          bool     `json:"is_correct"`
+	CorrectOptionIDs   []string `json:"correct_option_ids"`
 }
 
 type SaveAnswerRequest struct {
@@ -13,9 +15,11 @@ type SaveAnswerRequest struct {
 }
 
 type SaveAnswerResponse struct {
-	QuizQuestionID string    `json:"quiz_question_id"`
-	OptionID       string    `json:"option_id"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	QuizQuestionID   string    `json:"quiz_question_id"`
+	OptionID         string    `json:"option_id"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	IsCorrect        bool      `json:"is_correct"`
+	CorrectOptionIDs []string  `json:"correct_option_ids"`
 }
 
 type AttemptResponse struct {

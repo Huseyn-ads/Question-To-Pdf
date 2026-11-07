@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/url"
 	"time"
+
+	"qtp/internal/locale"
 )
 
 const VerificationLifetime = 24 * time.Hour
@@ -48,7 +50,9 @@ func verificationTokenHash(raw string) ([]byte, error) {
 
 func (s *UserService) sendVerification(ctx context.Context, u *User, raw string, expires time.Time) bool {
 	// A fragment is never sent in HTTP request URLs or Referer headers.
-	link := s.publicOrigin + "/v1/auth/verify-email#token=" + url.QueryEscape(raw)
+	// The language only picks the page copy; it stays in the fragment too.
+	link := s.publicOrigin + "/v1/auth/verify-email#token=" + url.QueryEscape(raw) +
+		"&lang=" + locale.FromContext(ctx)
 	if err := s.mailer.SendVerification(ctx, u.Email, link, expires); err != nil {
 		// SMTP servers can echo addresses or message data. Do not log their response.
 		slog.Error("verification email delivery failed", "reason", safeMailFailureReason(err))

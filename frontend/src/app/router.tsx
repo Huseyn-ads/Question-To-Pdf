@@ -13,7 +13,7 @@ const page = <T,>(load: () => Promise<T>, pick: (module: T) => ComponentType) =>
 })
 
 const appPages: RouteObject[] = [
-  { index: true, ...page(() => import('@/features/dashboard/DashboardPage'), (m) => m.DashboardPage) },
+  { path: 'dashboard', ...page(() => import('@/features/dashboard/DashboardPage'), (m) => m.DashboardPage) },
   { path: 'banks', ...page(() => import('@/features/banks/BanksPage'), (m) => m.BanksPage) },
   { path: 'banks/:bankId', ...page(() => import('@/features/banks/BankPage'), (m) => m.BankPage) },
   { path: 'import', ...page(() => import('@/features/import/ImportPage'), (m) => m.ImportPage) },
@@ -33,6 +33,8 @@ const routes: RouteObject[] = [
     element: <AppRoot />,
     hydrateFallbackElement: <FullPageLoader />,
     children: [
+      // Public landing page: what a first-time visitor sees.
+      { index: true, ...page(() => import('@/features/landing/LandingPage'), (m) => m.LandingPage) },
       { path: 'login', ...page(() => import('@/features/auth/LoginPage'), (m) => m.LoginPage) },
       { path: 'register', ...page(() => import('@/features/auth/RegisterPage'), (m) => m.RegisterPage) },
       { path: 'check-email', ...page(() => import('@/features/auth/CheckEmailPage'), (m) => m.CheckEmailPage) },

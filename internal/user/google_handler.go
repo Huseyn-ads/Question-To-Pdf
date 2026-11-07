@@ -28,7 +28,25 @@ const (
 	// googleSuccessPath is the same-origin frontend page that finishes sign-in:
 	// it loads /v1/auth/me and /v1/auth/csrf like after a password login.
 	googleSuccessPath = "/auth/complete"
+	// googleFailurePath shows a readable message instead of a JSON error page.
+	// The reason is one of the fixed codes below, never provider text.
+	googleFailurePath = "/login?google_error="
 )
+
+// Fixed reasons a failed callback sends to the frontend sign-in page.
+const (
+	googleErrExpired         = "expired"
+	googleErrCanceled        = "canceled"
+	googleErrFailed          = "failed"
+	googleErrEmailUnverified = "email_unverified"
+	googleErrEmailTaken      = "email_taken"
+)
+
+// googleFail ends a callback the browser navigated to: it sends the user
+// back to the sign-in page, which explains what happened.
+func googleFail(w http.ResponseWriter, r *http.Request, reason string) {
+	http.Redirect(w, r, googleFailurePath+reason, http.StatusSeeOther)
+}
 
 type googleLogin struct {
 	oauth    oauth2.Config
@@ -93,12 +111,12 @@ func (handler *UserHandler) GoogleCallback(w http.ResponseWriter, r *http.Reques
 	cookie := handler.googleStateCookie()
 	savedCookie, err := r.Cookie(cookie.Name)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, "Google sign-in expired; start again")
+		googleFail(w, r, googleErrExpired)
 		return
 	}
 	verifier, nonce, ok := handler.google.decodeState(savedCookie.Value, query.Get("state"), time.Now())
 	if !ok {
-		httpx.WriteError(w, http.StatusBadRequest, "Google sign-in expired or invalid; start again")
+		googleFail(w, r, googleErrExpired)
 		return
 	}
 	cookie.MaxAge = -1
@@ -107,7 +125,7 @@ func (handler *UserHandler) GoogleCallback(w http.ResponseWriter, r *http.Reques
 
 	code := query.Get("code")
 	if query.Get("error") != "" || code == "" {
-		httpx.WriteError(w, http.StatusBadRequest, "Google sign-in was canceled or incomplete")
+		googleFail(w, r, googleErrCanceled)
 		return
 	}
 	ctx, cancel := context.WithTimeout(oidc.ClientContext(r.Context(), handler.google.client), 12*time.Second)
@@ -116,11 +134,11 @@ func (handler *UserHandler) GoogleCallback(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		var providerErr *oauth2.RetrieveError
 		if errors.As(err, &providerErr) && providerErr.ErrorCode == "invalid_grant" {
-			httpx.WriteError(w, http.StatusBadRequest, "Google sign-in code expired or invalid; start again")
+			googleFail(w, r, googleErrExpired)
 			return
 		}
 		slog.Warn("Google sign-in code exchange failed")
-		httpx.WriteError(w, http.StatusBadGateway, "Google sign-in failed; try again")
+		googleFail(w, r, googleErrFailed)
 		return
 	}
 
@@ -128,21 +146,21 @@ func (handler *UserHandler) GoogleCallback(w http.ResponseWriter, r *http.Reques
 	idToken, err := handler.google.verifier.Verify(ctx, rawIDToken)
 	if err != nil {
 		slog.Warn("Google ID token verification failed")
-		httpx.WriteError(w, http.StatusBadGateway, "could not verify Google sign-in; start again")
+		googleFail(w, r, googleErrFailed)
 		return
 	}
 	var claims googleClaims
 	if err := idToken.Claims(&claims); err != nil || idToken.Subject == "" || len(idToken.Subject) > 255 {
-		httpx.WriteError(w, http.StatusBadGateway, "invalid Google account profile")
+		googleFail(w, r, googleErrFailed)
 		return
 	}
 	if subtle.ConstantTimeCompare([]byte(claims.Nonce), []byte(nonce)) != 1 {
-		httpx.WriteError(w, http.StatusBadRequest, "Google sign-in does not match this browser; start again")
+		googleFail(w, r, googleErrExpired)
 		return
 	}
 	if claims.AuthorizedParty != handler.google.oauth.ClientID &&
 		(claims.AuthorizedParty != "" || len(idToken.Audience) > 1) {
-		httpx.WriteError(w, http.StatusBadGateway, "invalid Google account profile")
+		googleFail(w, r, googleErrFailed)
 		return
 	}
 
@@ -150,12 +168,12 @@ func (handler *UserHandler) GoogleCallback(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrGoogleEmailRequired), errors.Is(err, ErrEmailNotVerified):
-			httpx.WriteError(w, http.StatusForbidden, err.Error())
+			googleFail(w, r, googleErrEmailUnverified)
 		case errors.Is(err, ErrEmailAlreadyExists):
-			httpx.WriteError(w, http.StatusConflict, "this email is already registered; use your existing sign-in method")
+			googleFail(w, r, googleErrEmailTaken)
 		default:
 			slog.Error("create application session for Google sign-in failed")
-			httpx.WriteError(w, http.StatusInternalServerError, "server error")
+			googleFail(w, r, googleErrFailed)
 		}
 		return
 	}

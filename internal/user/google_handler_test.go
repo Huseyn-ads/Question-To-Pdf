@@ -78,16 +78,16 @@ func TestGoogleLoginCallback(t *testing.T) {
 		name       string
 		change     map[string]any
 		wrongState bool
-		want       int
+		wantError  string
 	}{
-		{name: "first login", want: http.StatusSeeOther},
-		{name: "same subject with new email", change: map[string]any{"email": "renamed@gmail.com"}, want: http.StatusSeeOther},
-		{name: "same email with different subject", change: map[string]any{"sub": "other-google-id"}, want: http.StatusConflict},
-		{name: "unverified Gmail", change: map[string]any{"sub": "other-google-id", "email_verified": false}, want: http.StatusForbidden},
-		{name: "external email", change: map[string]any{"sub": "other-google-id", "email": "student@example.test"}, want: http.StatusForbidden},
-		{name: "wrong nonce", change: map[string]any{"nonce": "wrong"}, want: http.StatusBadRequest},
-		{name: "wrong audience", change: map[string]any{"aud": "other-client"}, want: http.StatusBadGateway},
-		{name: "wrong state", wrongState: true, want: http.StatusBadRequest},
+		{name: "first login"},
+		{name: "same subject with new email", change: map[string]any{"email": "renamed@gmail.com"}},
+		{name: "same email with different subject", change: map[string]any{"sub": "other-google-id"}, wantError: googleErrEmailTaken},
+		{name: "unverified Gmail", change: map[string]any{"sub": "other-google-id", "email_verified": false}, wantError: googleErrEmailUnverified},
+		{name: "external email", change: map[string]any{"sub": "other-google-id", "email": "student@example.test"}, wantError: googleErrEmailUnverified},
+		{name: "wrong nonce", change: map[string]any{"nonce": "wrong"}, wantError: googleErrExpired},
+		{name: "wrong audience", change: map[string]any{"aud": "other-client"}, wantError: googleErrFailed},
+		{name: "wrong state", wrongState: true, wantError: googleErrExpired},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			start := httptest.NewRecorder()
@@ -124,13 +124,17 @@ func TestGoogleLoginCallback(t *testing.T) {
 			request.AddCookie(cookies[0])
 			response := httptest.NewRecorder()
 			handler.GoogleCallback(response, request)
-			if response.Code != tc.want {
-				t.Fatalf("callback status = %d, want %d, body = %s", response.Code, tc.want, response.Body)
+			wantLocation := googleSuccessPath
+			if tc.wantError != "" {
+				wantLocation = googleFailurePath + tc.wantError
+			}
+			if response.Code != http.StatusSeeOther || response.Header().Get("Location") != wantLocation {
+				t.Fatalf("callback = %d %q, want 303 %q", response.Code, response.Header().Get("Location"), wantLocation)
 			}
 			if tc.wrongState && exchanges != before {
 				t.Fatal("exchanged a code with the wrong state")
 			}
-			if tc.want != http.StatusSeeOther {
+			if tc.wantError != "" {
 				for _, cookie := range response.Result().Cookies() {
 					if cookie.Name == sessionCookieName {
 						t.Fatal("failed login set a session cookie")

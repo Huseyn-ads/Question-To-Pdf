@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="{{.Lang}}" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>{{.Subject}}</title>
+  <style>
+    body { margin: 0; padding: 0; width: 100% !important; background: #F5F0E7; }
+    a { color: #2F5141; }
+    @media (max-width: 600px) {
+      .card-pad { padding: 32px 22px 28px !important; }
+      .heading { font-size: 26px !important; line-height: 32px !important; }
+      .button-cell a { display: block !important; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .page { background: #1A1815 !important; }
+      .card { background: #23201C !important; border-color: #3A352E !important; }
+      .ink { color: #EDE5D7 !important; }
+      .muted { color: #BCB0A0 !important; }
+      .divider { border-color: #3A352E !important; }
+      .pill { background: #2A3A31 !important; color: #B9D4C1 !important; }
+      .link { color: #9CC5A8 !important; }
+    }
+  </style>
+</head>
+<body class="page" style="margin:0;padding:0;background:#F5F0E7;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">{{.Preheader}}&#8202;&#847;&#8202;&#847;&#8202;&#847;&#8202;&#847;&#8202;&#847;</div>
+  <table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F5F0E7;">
+    <tr>
+      <td align="center" style="padding:36px 12px 40px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
+          <!-- Brand -->
+          <tr>
+            <td style="padding:0 4px 20px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="40" height="40" align="center" valign="middle" style="width:40px;height:40px;background:#2F5141;border-radius:10px;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:40px;font-weight:bold;color:#FFFCF6;">t</td>
+                  <td class="ink" style="padding-left:12px;font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:28px;font-weight:bold;letter-spacing:-0.4px;color:#352F29;">{{.Brand}}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Card -->
+          <tr>
+            <td class="card" style="background:#FFFCF6;border:1px solid #DDD2C1;border-top:4px solid #2F5141;border-radius:14px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="card-pad" style="padding:40px 40px 34px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    <p class="muted" style="margin:0 0 10px;font-size:13px;line-height:18px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:#4F6B55;">{{.Greeting}}</p>
+                    <h1 class="heading ink" style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:30px;line-height:36px;font-weight:bold;color:#352F29;">{{.Heading}}</h1>
+                    <p class="muted" style="margin:0 0 28px;font-size:16px;line-height:26px;color:#685E54;">{{.Body}}</p>
+
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td class="button-cell" align="center" style="border-radius:10px;background:#2F5141;">
+                          <a href="{{.Link}}" target="_blank" style="display:inline-block;padding:15px 30px;font-size:16px;line-height:20px;font-weight:600;color:#FFFCF6;text-decoration:none;border-radius:10px;">{{.Button}} &rarr;</a>
+                        </td>
+                      </tr>
+                    </table>
+
+                    <p style="margin:24px 0 0;">
+                      <span class="pill" style="display:inline-block;padding:7px 12px;border-radius:999px;background:#F0F4EE;font-size:14px;line-height:20px;color:#2F5141;">&#9201;&#xFE0E; {{.ValidityText}}</span>
+                    </p>
+
+                    <hr class="divider" style="margin:30px 0 22px;border:0;border-top:1px solid #E9E1D3;">
+
+                    <p class="muted" style="margin:0 0 8px;font-size:13px;line-height:20px;color:#776B5F;">{{.Fallback}}</p>
+                    <p style="margin:0 0 20px;font-size:13px;line-height:20px;word-break:break-all;"><a class="link" href="{{.Link}}" target="_blank" style="color:#2F5141;">{{.Link}}</a></p>
+                    <p class="muted" style="margin:0;font-size:13px;line-height:20px;color:#776B5F;">{{.Ignore}}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td class="muted" align="center" style="padding:22px 12px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#776B5F;">
+              {{.Brand}} &middot; {{.Tagline}}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

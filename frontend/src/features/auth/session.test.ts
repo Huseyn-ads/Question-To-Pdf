@@ -21,9 +21,10 @@ describe('safeNext', () => {
     '/check-email',
     '/x\n/y',
     '',
+    '/',
     null,
   ])('rejects %s', (value) => {
-    expect(safeNext(value)).toBe('/')
+    expect(safeNext(value)).toBe('/dashboard')
   })
 
   it('does not reject app paths that merely start like auth pages', () => {
@@ -35,6 +36,7 @@ describe('loginPath', () => {
   it('encodes the return path and drops unsafe or trivial ones', () => {
     expect(loginPath('/banks/1?tab=q')).toBe('/login?next=%2Fbanks%2F1%3Ftab%3Dq')
     expect(loginPath('/')).toBe('/login')
+    expect(loginPath('/dashboard')).toBe('/login')
     expect(loginPath('//evil')).toBe('/login')
   })
 })

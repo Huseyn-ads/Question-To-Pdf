@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"qtp/internal/config"
+	"qtp/internal/locale"
 )
 
 func smtpTestServer(t *testing.T) (config.MailConfig, <-chan string) {
@@ -89,7 +90,8 @@ func TestSMTPDeliversMIMEVerificationMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if message.Header.Get("To") != "student@example.test" || message.Header.Get("From") != cfg.From {
+	sender, err := mail.ParseAddress(message.Header.Get("From"))
+	if message.Header.Get("To") != "student@example.test" || err != nil || sender.Address != cfg.From || sender.Name != brandName {
 		t.Fatal("wrong SMTP message addresses")
 	}
 	mediaType, params, err := mime.ParseMediaType(message.Header.Get("Content-Type"))
@@ -110,7 +112,7 @@ func TestSMTPDeliversMIMEVerificationMessage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Contains(body, []byte(link)) || !bytes.Contains(body, []byte(expires.Format(time.RFC3339))) {
+		if !bytes.Contains(body, []byte(link)) || !bytes.Contains(body, []byte("24 часа")) {
 			t.Fatalf("verification link/expiry missing from MIME part %d", parts)
 		}
 		parts++
@@ -173,7 +175,7 @@ func TestBuildMessageEscapesHTMLAndRejectsRecipientInjection(t *testing.T) {
 	if err == nil {
 		t.Fatal("accepted injected recipient header")
 	}
-	raw, err := buildMessage(cfg.From, "user@example.test", "https://quiz.test/#token=a&x=<bad>", time.Now())
+	raw, err := buildMessage(cfg.From, "user@example.test", "https://quiz.test/#token=a&x=<bad>", time.Now(), "ru")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,5 +203,44 @@ func TestBuildMessageEscapesHTMLAndRejectsRecipientInjection(t *testing.T) {
 		if strings.HasPrefix(part.Header.Get("Content-Type"), "text/html") && bytes.Contains(body, []byte("<bad>")) {
 			t.Fatal("HTML template failed to escape link")
 		}
+	}
+}
+
+func TestVerificationEmailFollowsRequestLanguage(t *testing.T) {
+	now := time.Now()
+	for lang, want := range map[string][]string{
+		"az": {"E-poçtunuzu təsdiqləyin", "24 saat", `lang="az"`},
+		"ru": {"Подтвердите email", "24 часа", `lang="ru"`},
+		"xx": {"Подтвердите email"},
+	} {
+		email, err := renderVerification("https://quiz.test/v1/auth/verify-email#token=t&lang="+lang, now.Add(24*time.Hour), now, lang)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, text := range want {
+			if !strings.Contains(email.HTML, text) {
+				t.Errorf("%s email is missing %q", lang, text)
+			}
+		}
+	}
+	if got := russianHours(1) + russianHours(3) + russianHours(11) + russianHours(21); got != "часчасачасовчас" {
+		t.Errorf("russian hour forms = %q", got)
+	}
+}
+
+func TestSMTPUsesLanguageFromContext(t *testing.T) {
+	cfg, received := smtpTestServer(t)
+	ctx := locale.WithLanguage(context.Background(), locale.Azerbaijani)
+	if err := NewSMTP(cfg).SendVerification(ctx, "student@example.test", "https://quiz.test/#token=x", time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	raw := <-received
+	message, err := mail.ReadMessage(strings.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject, err := new(mime.WordDecoder).DecodeHeader(message.Header.Get("Subject"))
+	if err != nil || !strings.HasPrefix(subject, "E-poçtunuzu") || message.Header.Get("Content-Language") != "az" {
+		t.Fatalf("Azerbaijani email expected, got subject %q", subject)
 	}
 }

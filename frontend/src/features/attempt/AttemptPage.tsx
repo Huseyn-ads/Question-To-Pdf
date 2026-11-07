@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, ArrowRight, Flag, Grid3x3, TimerOff, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Flag, TimerOff, X, XCircle } from 'lucide-react'
 import { useApi } from '@/api/context'
 import { isApiError } from '@/api/errors'
 import { queryKeys } from '@/api/queryKeys'
@@ -18,20 +18,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ErrorState } from '@/components/common/states'
+import { ErrorState, errorMessage } from '@/components/common/states'
 import { LogoMark } from '@/components/brand/Logo'
-import { FinishDialog } from './FinishDialog'
-import { QuestionNavigator } from './QuestionNavigator'
+import { optionLetter } from './optionLetter'
 import { QuestionView } from './QuestionView'
-import { SaveStatus } from './SaveStatus'
 import { TimerPill } from './TimerPill'
-import { useAttemptSession } from './useAttemptSession'
+import { useAttemptSession, type AttemptSession } from './useAttemptSession'
 
 export function AttemptPage() {
   const { attemptId = '' } = useParams()
-  // Remount per attempt so the save queue never leaks between attempts.
+  // Remount per attempt so local answers never leak between attempts.
   return <AttemptScreen key={attemptId} attemptId={attemptId} />
 }
 
@@ -57,69 +54,61 @@ function AttemptScreen({ attemptId }: { attemptId: string }) {
   const paths = usePaths()
   const navigate = useNavigate()
   const session = useAttemptSession(attemptId)
-  const { attempt, phase } = session
+  const { attempt, phase, question, current, index, questions, counts } = session
   const title = useQuizTitle(attempt?.quiz_id)
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [finishOpen, setFinishOpen] = useState(false)
-  const [sheetOpen, setSheetOpen] = useState(false)
+  const [earlyOpen, setEarlyOpen] = useState(false)
+  const [finishError, setFinishError] = useState<unknown>(null)
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const nextRef = useRef<HTMLButtonElement>(null)
 
-  const questions = useMemo(() => attempt?.questions ?? [], [attempt])
   const total = questions.length
-  const requested = Number.parseInt(searchParams.get('q') ?? '1', 10)
-  const index = Math.min(Math.max(Number.isFinite(requested) ? requested - 1 : 0, 0), Math.max(total - 1, 0))
-  const question = questions[index]
-  const answeredCount = questions.filter((q) => session.selections[q.id]).length
-  const unansweredNumbers = questions.flatMap((q, i) => (session.selections[q.id] ? [] : [i + 1]))
   const locked = phase !== 'active'
-
-  // The question the user is on right now. Updated synchronously on every move,
-  // so a key pressed before the next render never lands on the previous question.
-  const currentIndex = useRef(index)
-  useEffect(() => {
-    currentIndex.current = index
-  }, [index])
-
-  const goTo = useCallback(
-    (next: number, { focus = true } = {}) => {
-      if (next < 0 || next >= total) return
-      currentIndex.current = next
-      setSearchParams({ q: String(next + 1) }, { replace: true })
-      window.scrollTo({ top: 0, behavior: 'instant' })
-      if (focus) requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }))
-    },
-    [setSearchParams, total],
-  )
+  const isDone = Boolean(current) && session.upcoming === null
 
   const toResult = useCallback(() => void navigate(paths.result(attemptId), { replace: true }), [navigate, paths, attemptId])
 
-  // Keyboard: 1–9 choose an option; ←/→ change question (radios keep their own arrows).
-  const dialogOpen = finishOpen || sheetOpen || phase === 'expired' || phase === 'closed'
+  const finish = useCallback(async () => {
+    setFinishError(null)
+    const outcome = await session.finish()
+    if (outcome.ok) toResult()
+    else setFinishError(outcome.error)
+    return outcome.ok
+  }, [session, toResult])
+
+  const goNext = useCallback(() => {
+    if (!session.goNext()) return
+    window.scrollTo({ top: 0, behavior: 'instant' })
+    requestAnimationFrame(() => headingRef.current?.focus({ preventScroll: true }))
+  }, [session])
+
+  // After the verdict, move focus to "Next" so Enter continues.
+  const answeredId = current ? question?.id : undefined
+  useEffect(() => {
+    if (answeredId) requestAnimationFrame(() => nextRef.current?.focus({ preventScroll: true }))
+  }, [answeredId])
+
+  // Keyboard: 1–9 choose an option; Enter or → goes on after the verdict.
+  const dialogOpen = earlyOpen || phase === 'expired' || phase === 'closed'
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (dialogOpen || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
       const target = event.target as HTMLElement | null
-      const isRadio = target instanceof HTMLInputElement && target.type === 'radio'
-      if (target?.closest('input:not([type=radio]), textarea, select, [contenteditable=true]')) return
-      const at = currentIndex.current
-      const current = questions[at]
-      if (current && /^[1-9]$/.test(event.key)) {
-        const option = current.options[Number(event.key) - 1]
+      if (target?.closest('input, textarea, select, [contenteditable=true]')) return
+      if (!question) return
+      if (!current && /^[1-9]$/.test(event.key)) {
+        const option = question.options[Number(event.key) - 1]
         if (option && !locked) {
           event.preventDefault()
-          session.select(current.id, option.id)
+          session.choose(option.id)
         }
-      } else if (!isRadio && event.key === 'ArrowRight') {
+      } else if (current && event.key === 'ArrowRight' && session.upcoming !== null) {
         event.preventDefault()
-        goTo(at + 1)
-      } else if (!isRadio && event.key === 'ArrowLeft') {
-        event.preventDefault()
-        goTo(at - 1)
+        goNext()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dialogOpen, goTo, locked, questions, session])
+  }, [current, dialogOpen, goNext, locked, question, session])
 
   if (session.query.isError && !attempt) {
     const notFound = isApiError(session.query.error, 'not_found') || isApiError(session.query.error, 'validation')
@@ -143,14 +132,11 @@ function AttemptScreen({ attemptId }: { attemptId: string }) {
   }
 
   const exitTo = attempt ? paths.quiz(attempt.quiz_id) : paths.dashboard
-  const saveStatus = <SaveStatus overall={session.saves.overall} onRetry={session.retryFailed} />
-  const isLast = index === total - 1
 
   return (
     <FocusFrame>
-      {/* Header */}
       <header className="sticky top-0 z-20 border-b border-line bg-surface/95 backdrop-blur-sm">
-        <div className="mx-auto flex h-16 max-w-[76rem] items-center gap-3 px-3 sm:px-6">
+        <div className="mx-auto flex h-16 max-w-[60rem] items-center gap-2 px-3 sm:gap-3 sm:px-6">
           <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
             <Link to={exitTo} title={t.attempt.exitHint}>
               <ArrowLeft aria-hidden />
@@ -169,11 +155,10 @@ function AttemptScreen({ attemptId }: { attemptId: string }) {
               {title ?? (attempt ? t.quiz.untitled : <Skeleton className="h-4 w-40" />)}
             </p>
             {attempt && (
-              <p className="truncate text-xs text-ink-subtle">
-                {t.attempt.answeredOf(answeredCount, total)}
-              </p>
+              <p className="truncate text-xs text-ink-subtle">{t.attempt.questionOf(Math.min(index + 1, total), total)}</p>
             )}
           </div>
+          {attempt && <Score correct={counts.correct} wrong={counts.wrong} />}
           {attempt && <TimerPill remaining={session.remaining} compact />}
         </div>
         <div
@@ -182,191 +167,118 @@ function AttemptScreen({ attemptId }: { attemptId: string }) {
           aria-label={t.attempt.progressLabel}
           aria-valuemin={0}
           aria-valuemax={total}
-          aria-valuenow={answeredCount}
-          aria-valuetext={t.attempt.answeredOf(answeredCount, total)}
+          aria-valuenow={counts.answered}
+          aria-valuetext={t.attempt.answeredOf(counts.answered, total)}
         >
           <div
             className="h-full bg-forest transition-[width] duration-300"
-            style={{ width: total ? `${(answeredCount / total) * 100}%` : 0 }}
+            style={{ width: total ? `${(counts.answered / total) * 100}%` : 0 }}
           />
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[76rem] gap-10 px-4 pt-6 pb-32 sm:px-6 md:pt-10 lg:grid-cols-[minmax(0,1fr)_17.5rem] lg:pb-16 xl:gap-14">
-        <main id="main" className="min-w-0">
-          <div className="mx-auto max-w-reading">
-            {!attempt || !question ? (
-              <QuestionSkeleton />
-            ) : (
-              <>
-                {session.saves.overall === 'error' && phase === 'active' && (
-                  <Alert tone="danger" className="mb-6">
+      <main id="main" className="mx-auto max-w-[60rem] px-4 pt-6 pb-36 sm:px-6 md:pt-10 md:pb-16">
+        <div className="mx-auto max-w-reading">
+          {!attempt || !question ? (
+            <QuestionSkeleton />
+          ) : (
+            <>
+              <QuestionView
+                key={question.id}
+                ref={headingRef}
+                question={question}
+                number={index + 1}
+                total={total}
+                answer={current}
+                sendingId={session.pending?.status === 'sending' ? session.pending.optionId : undefined}
+                disabled={locked}
+                onChoose={session.choose}
+              />
+
+              <div aria-live="polite" className="mt-5 empty:hidden">
+                {current && <Verdict session={session} />}
+                {session.pending?.status === 'error' && (
+                  <Alert tone="danger">
                     <AlertTriangle aria-hidden />
-                    <AlertTitle>{t.attempt.save.error}</AlertTitle>
+                    <AlertTitle>{t.attempt.sendFailed}</AlertTitle>
                     <AlertDescription>
-                      <p>{t.attempt.save.errorDetail}</p>
-                      <Button size="sm" variant="secondary" onClick={session.retryFailed}>
-                        {t.attempt.save.retry}
+                      <p>{errorMessage(t, session.pending.error)}</p>
+                      <Button size="sm" variant="secondary" onClick={session.retry}>
+                        {t.common.retry}
                       </Button>
                     </AlertDescription>
                   </Alert>
                 )}
-                <QuestionView
-                  ref={headingRef}
-                  question={question}
-                  number={index + 1}
-                  total={total}
-                  selectedOptionId={session.selections[question.id]}
-                  disabled={locked}
-                  onSelect={(optionId) => session.select(question.id, optionId)}
-                  status={saveStatus}
-                />
+              </div>
 
-                {/* Desktop / tablet navigation */}
-                <div className="mt-8 hidden items-center justify-between gap-3 border-t border-line-soft pt-6 sm:flex">
-                  <Button variant="secondary" onClick={() => goTo(index - 1)} disabled={index === 0}>
-                    <ArrowLeft aria-hidden />
-                    {t.attempt.prev}
-                  </Button>
-                  <p className="hidden text-xs text-ink-subtle lg:block">{t.attempt.keyboardHint}</p>
-                  <Button variant="ghost" className="lg:hidden" onClick={() => setSheetOpen(true)}>
-                    <Grid3x3 aria-hidden />
-                    {t.attempt.allQuestions}
-                    <span className="tabular text-ink-subtle">
-                      {index + 1}/{total}
-                    </span>
-                  </Button>
-                  {isLast ? (
-                    <Button onClick={() => setFinishOpen(true)} disabled={locked}>
+              {finishError != null && (
+                <Alert tone="danger" className="mt-5">
+                  <AlertTriangle aria-hidden />
+                  <AlertTitle>{t.attempt.finishFailed}</AlertTitle>
+                  <AlertDescription>
+                    <p>{errorMessage(t, finishError)}</p>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Actions: inline on tablets and desktops, pinned to the bottom on phones. */}
+              <div className="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/97 px-4 pt-3 backdrop-blur-sm sm:static sm:mt-8 sm:border-t sm:border-line-soft sm:bg-transparent sm:px-0 sm:pt-6 sm:pb-0 sm:backdrop-blur-none">
+                <div className="flex items-center justify-between gap-3">
+                  {!isDone ? (
+                    <Button
+                      variant="ghost"
+                      className="text-ink-muted"
+                      onClick={() => setEarlyOpen(true)}
+                      disabled={locked || session.pending?.status === 'sending'}
+                    >
                       <Flag aria-hidden />
-                      {t.attempt.toFinish}
+                      <span className="sm:hidden">{t.attempt.finishShort}</span>
+                      <span className="hidden sm:inline">{t.attempt.finishEarly}</span>
                     </Button>
                   ) : (
-                    <Button onClick={() => goTo(index + 1)}>
+                    <span className="hidden text-sm text-ink-muted sm:block">{t.attempt.allDone}</span>
+                  )}
+                  {isDone ? (
+                    <Button
+                      ref={nextRef}
+                      size="lg"
+                      className="ml-auto max-sm:flex-1"
+                      loading={session.finishPending}
+                      disabled={locked && phase !== 'finishing'}
+                      onClick={() => void finish()}
+                    >
+                      {t.attempt.showResult}
+                      <ArrowRight aria-hidden />
+                    </Button>
+                  ) : (
+                    <Button
+                      ref={nextRef}
+                      size="lg"
+                      className="ml-auto max-sm:flex-1"
+                      onClick={goNext}
+                      disabled={!current || locked}
+                    >
                       {t.attempt.next}
                       <ArrowRight aria-hidden />
                     </Button>
                   )}
                 </div>
-              </>
-            )}
-          </div>
-        </main>
-
-        {/* Desktop navigator */}
-        <aside className="hidden lg:block" aria-label={t.attempt.navigatorTitle}>
-          <div className="sticky top-24 rounded-lg border border-line bg-surface p-5">
-            <div className="mb-4 flex items-baseline justify-between gap-2">
-              <h2 className="font-display text-lg font-semibold text-ink">{t.attempt.navigatorTitle}</h2>
-              <span className="tabular text-sm text-ink-muted">
-                {answeredCount}/{total}
-              </span>
-            </div>
-            {attempt ? (
-              <QuestionNavigator
-                questions={questions}
-                currentIndex={index}
-                selections={session.selections}
-                saves={session.saves}
-                onJump={(i) => goTo(i)}
-              />
-            ) : (
-              <div className="grid grid-cols-5 gap-2">
-                {Array.from({ length: 10 }, (_, i) => (
-                  <Skeleton key={i} className="h-10" />
-                ))}
+                <p className="mt-3 hidden text-center text-xs text-ink-subtle lg:block">
+                  {current ? t.attempt.keyboardNext : t.attempt.keyboardHint}
+                </p>
               </div>
-            )}
-            <Button className="mt-5 w-full" onClick={() => setFinishOpen(true)} disabled={!attempt || locked}>
-              <Flag aria-hidden />
-              {t.attempt.finish}
-            </Button>
-          </div>
-        </aside>
-      </div>
-
-      {/* Mobile bottom bar */}
-      {attempt && (
-        <div className="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-line bg-surface/97 px-3 pt-3 backdrop-blur-sm sm:hidden">
-          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
-            <Button
-              variant="secondary"
-              size="icon"
-              onClick={() => goTo(index - 1)}
-              disabled={index === 0}
-              aria-label={t.attempt.prev}
-            >
-              <ArrowLeft aria-hidden />
-            </Button>
-            <Button variant="ghost" onClick={() => setSheetOpen(true)} className="text-ink">
-              <Grid3x3 aria-hidden />
-              <span className="tabular">
-                {index + 1} / {total}
-              </span>
-              <span className="sr-only">{t.attempt.allQuestions}</span>
-            </Button>
-            {isLast ? (
-              <Button onClick={() => setFinishOpen(true)} disabled={locked} className="px-4">
-                <Flag aria-hidden />
-                {t.attempt.toFinish}
-              </Button>
-            ) : (
-              <Button onClick={() => goTo(index + 1)} className="px-5">
-                {t.attempt.next}
-                <ArrowRight aria-hidden />
-              </Button>
-            )}
-          </div>
+            </>
+          )}
         </div>
-      )}
+      </main>
 
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="bottom" closeLabel={t.common.close} className="px-4 pb-6">
-          <SheetHeader className="px-0 pb-0">
-            <SheetTitle>{t.attempt.allQuestions}</SheetTitle>
-            <SheetDescription>{t.attempt.answeredOf(answeredCount, total)}</SheetDescription>
-          </SheetHeader>
-          <div className="overflow-y-auto">
-            <QuestionNavigator
-              questions={questions}
-              currentIndex={index}
-              selections={session.selections}
-              saves={session.saves}
-              columns={6}
-              onJump={(i) => {
-                setSheetOpen(false)
-                goTo(i, { focus: false })
-              }}
-            />
-          </div>
-          <Button
-            size="lg"
-            className="w-full"
-            disabled={locked}
-            onClick={() => {
-              setSheetOpen(false)
-              setFinishOpen(true)
-            }}
-          >
-            <Flag aria-hidden />
-            {t.attempt.finish}
-          </Button>
-        </SheetContent>
-      </Sheet>
-
-      <FinishDialog
-        open={finishOpen && (phase === 'active' || phase === 'finishing')}
-        onOpenChange={setFinishOpen}
-        unansweredNumbers={unansweredNumbers}
-        total={total}
-        numberOf={(id) => (session.questionIndexById.get(id) ?? 0) + 1}
-        onJump={(n) => {
-          setFinishOpen(false)
-          goTo(n - 1)
-        }}
-        onFinish={session.finish}
-        onRetrySaves={session.retryFailed}
-        onFinished={toResult}
+      <EarlyFinishDialog
+        open={earlyOpen && (phase === 'active' || phase === 'finishing')}
+        onOpenChange={setEarlyOpen}
+        unanswered={counts.unanswered}
+        pending={session.finishPending}
+        error={finishError}
+        onConfirm={() => void finish()}
       />
 
       <BlockingDialog
@@ -386,6 +298,114 @@ function AttemptScreen({ attemptId }: { attemptId: string }) {
         onAction={toResult}
       />
     </FocusFrame>
+  )
+}
+
+/** Running score: answers are checked at once, so the student sees it grow. */
+function Score({ correct, wrong }: { correct: number; wrong: number }) {
+  const { t } = useI18n()
+  return (
+    <p className="flex items-center gap-2 text-sm font-semibold tabular" aria-label={t.attempt.scoreLabel(correct, wrong)}>
+      <span className="inline-flex items-center gap-1 rounded-full bg-forest-soft px-2 py-1 text-forest" aria-hidden>
+        <CheckCircle2 className="size-3.5" />
+        {correct}
+      </span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-terracotta-soft px-2 py-1 text-terracotta-ink" aria-hidden>
+        <XCircle className="size-3.5" />
+        {wrong}
+      </span>
+    </p>
+  )
+}
+
+function Verdict({ session }: { session: AttemptSession }) {
+  const { t } = useI18n()
+  const { current, question } = session
+  if (!current || !question) return null
+  const noKey = current.correct_option_ids.length === 0
+  const right = question.options.flatMap((o, i) =>
+    current.correct_option_ids.includes(o.id) ? [`${optionLetter(i)} — ${o.text}`] : [],
+  )
+
+  if (noKey) {
+    return (
+      <Alert tone="warning">
+        <AlertTriangle aria-hidden />
+        <AlertTitle>{t.attempt.feedback.noKeyTitle}</AlertTitle>
+        <AlertDescription>
+          <p>{t.attempt.feedback.noKey}</p>
+        </AlertDescription>
+      </Alert>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        'flex gap-3 rounded-lg border px-4 py-3.5 animate-fade-in',
+        current.is_correct ? 'border-forest/25 bg-forest-tint' : 'border-terracotta/35 bg-terracotta-soft',
+      )}
+    >
+      {current.is_correct ? (
+        <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-forest" aria-hidden />
+      ) : (
+        <XCircle className="mt-0.5 size-5 shrink-0 text-terracotta-ink" aria-hidden />
+      )}
+      <div className="min-w-0">
+        <p className={cn('font-semibold', current.is_correct ? 'text-forest' : 'text-terracotta-ink')}>
+          {current.is_correct ? t.attempt.feedback.rightTitle : t.attempt.feedback.wrongTitle}
+        </p>
+        {!current.is_correct && (
+          <p className="mt-0.5 text-sm whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
+            {t.attempt.feedback.correctIs(right.join('; '))}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EarlyFinishDialog({
+  open,
+  onOpenChange,
+  unanswered,
+  pending,
+  error,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  unanswered: number
+  pending: boolean
+  error: unknown
+  onConfirm: () => void
+}) {
+  const { t, plural } = useI18n()
+  return (
+    <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
+      <DialogContent showCloseButton={!pending}>
+        <DialogHeader>
+          <DialogTitle>{t.attempt.earlyDialog.title}</DialogTitle>
+          <DialogDescription>{t.attempt.earlyDialog.text(plural(unanswered, t.quiz.questions))}</DialogDescription>
+        </DialogHeader>
+        {error != null && (
+          <Alert tone="danger">
+            <AlertTriangle aria-hidden />
+            <AlertDescription>
+              <p>{errorMessage(t, error)}</p>
+            </AlertDescription>
+          </Alert>
+        )}
+        <DialogFooter>
+          <Button variant="secondary" disabled={pending} onClick={() => onOpenChange(false)}>
+            {t.attempt.earlyDialog.keepGoing}
+          </Button>
+          <Button loading={pending} onClick={onConfirm}>
+            {error != null ? t.common.retry : t.attempt.earlyDialog.confirm}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -433,7 +453,7 @@ function BlockingDialog({
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader className="pr-0">
-          <span className={cn('mb-1 grid size-11 place-items-center rounded-full bg-terracotta-soft text-[#8a4527]')}>
+          <span className="mb-1 grid size-11 place-items-center rounded-full bg-terracotta-soft text-terracotta-ink">
             {icon}
           </span>
           <DialogTitle>{title}</DialogTitle>

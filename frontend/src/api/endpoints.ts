@@ -59,7 +59,7 @@ export function normalizeAttempt(raw: AttemptDetails): AttemptDetails {
     questions: (raw.questions ?? [])
       .map((q) => ({ ...q, options: [...(q.options ?? [])].sort(byPosition) }))
       .sort(byPosition),
-    answers: raw.answers ?? [],
+    answers: (raw.answers ?? []).map((a) => ({ ...a, correct_option_ids: a.correct_option_ids ?? [] })),
   }
 }
 

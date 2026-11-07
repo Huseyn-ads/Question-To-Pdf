@@ -111,7 +111,7 @@ func (handler *AttemptHandler) SaveAnswer(w http.ResponseWriter, r *http.Request
 			httpx.WriteError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, ErrAttemptNotFound), errors.Is(err, ErrAnswerTargetNotFound):
 			httpx.WriteError(w, http.StatusNotFound, err.Error())
-		case errors.Is(err, ErrAttemptClosed):
+		case errors.Is(err, ErrAttemptClosed), errors.Is(err, ErrAnswerLocked):
 			httpx.WriteError(w, http.StatusConflict, err.Error())
 		default:
 			slog.Error("save answer", "error", err)
@@ -121,9 +121,11 @@ func (handler *AttemptHandler) SaveAnswer(w http.ResponseWriter, r *http.Request
 	}
 
 	response := SaveAnswerResponse{
-		QuizQuestionID: attemptAnswer.QuizQuestionID,
-		OptionID:       attemptAnswer.QuizAnswerOptionID,
-		UpdatedAt:      attemptAnswer.UpdatedAt,
+		QuizQuestionID:   attemptAnswer.QuizQuestionID,
+		OptionID:         attemptAnswer.QuizAnswerOptionID,
+		UpdatedAt:        attemptAnswer.UpdatedAt,
+		IsCorrect:        attemptAnswer.IsCorrect,
+		CorrectOptionIDs: nonNilIDs(attemptAnswer.CorrectOptionIDs),
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, response)
@@ -363,6 +365,8 @@ func toAttemptResponse(details *AttemptDetails) AttemptResponse {
 			ID:                 answer.ID,
 			QuizQuestionID:     answer.QuizQuestionID,
 			QuizAnswerOptionID: answer.QuizAnswerOptionID,
+			IsCorrect:          answer.IsCorrect,
+			CorrectOptionIDs:   nonNilIDs(answer.CorrectOptionIDs),
 		})
 	}
 
@@ -377,4 +381,12 @@ func toAttemptResponse(details *AttemptDetails) AttemptResponse {
 		Questions:  questions,
 		Answers:    answers,
 	}
+}
+
+// nonNilIDs keeps JSON arrays as [] instead of null.
+func nonNilIDs(ids []string) []string {
+	if ids == nil {
+		return []string{}
+	}
+	return ids
 }

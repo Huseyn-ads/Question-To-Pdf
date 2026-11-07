@@ -13,7 +13,8 @@ export function PathsProvider({ base, children }: { base: string; children: Reac
 export function buildPaths(base: string) {
   return {
     base,
-    dashboard: base || '/',
+    home: '/',
+    dashboard: base || '/dashboard',
     banks: `${base}/banks`,
     bank: (bankId: string) => `${base}/banks/${bankId}`,
     importDocx: `${base}/import`,

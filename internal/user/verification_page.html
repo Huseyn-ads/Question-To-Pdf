@@ -2,53 +2,286 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="referrer" content="no-referrer">
-  <title>Подтверждение email</title>
+  <meta name="color-scheme" content="light dark">
+  <title>Подтверждение email · telebeland</title>
+  <script nonce="{{.Nonce}}">
+    // Same origin as the app: reuse its saved theme before the first paint.
+    (function () {
+      var theme = "system";
+      try { theme = localStorage.getItem("telebeland.theme") || "system"; } catch (e) {}
+      var query = window.matchMedia("(prefers-color-scheme: dark)");
+      var apply = function () {
+        var dark = theme === "dark" || (theme !== "light" && query.matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      };
+      apply();
+      if (query.addEventListener) query.addEventListener("change", apply);
+    })();
+  </script>
+  <style nonce="{{.Nonce}}">
+    :root {
+      --paper: #f5f0e7; --surface: #fffcf6; --sunken: #ede5d7; --line: #ddd2c1; --line-soft: #e9e1d3;
+      --ink: #352f29; --muted: #685e54; --subtle: #776b5f;
+      --forest: #2f5141; --forest-hover: #264436; --on-forest: #fffcf6; --forest-soft: #e4ece4;
+      --sage: #6e8f76; --terracotta: #b5643f; --terracotta-soft: #f6e4d8; --terracotta-ink: #8a4527;
+      --shadow: 0 1px 2px rgb(53 47 41 / .06), 0 18px 40px -18px rgb(53 47 41 / .22);
+      --serif: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
+      --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    :root[data-theme="dark"] {
+      --paper: #1a1815; --surface: #23201c; --sunken: #2c2823; --line: #3a352e; --line-soft: #2f2b25;
+      --ink: #ede5d7; --muted: #bcb0a0; --subtle: #a99d8e;
+      --forest: #9cc5a8; --forest-hover: #b2d4bc; --on-forest: #1a1815; --forest-soft: #2a3a31;
+      --sage: #87a68e; --terracotta: #d08560; --terracotta-soft: #3d2a21; --terracotta-ink: #eba887;
+      --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 18px 40px -18px rgb(0 0 0 / .6);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      min-height: 100dvh; display: flex; flex-direction: column;
+      background: var(--paper); color: var(--ink); font: 400 16px/1.6 var(--sans);
+      -webkit-font-smoothing: antialiased; overflow-x: hidden;
+    }
+    .glow { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .glow span { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .45; }
+    .glow .a { width: 420px; height: 420px; background: var(--forest-soft); top: -140px; right: -120px; }
+    .glow .b { width: 360px; height: 360px; background: var(--terracotta-soft); bottom: -160px; left: -120px; }
+    header, main, footer { position: relative; z-index: 1; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px clamp(16px, 4vw, 40px); }
+    .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; border-radius: 10px; }
+    .brand b { font: 600 22px/1 var(--serif); letter-spacing: -.02em; }
+    .langs { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+    .langs button {
+      min-width: 44px; height: 32px; border: 0; border-radius: 999px; background: transparent;
+      color: var(--muted); font: 600 13px/1 var(--sans); letter-spacing: .04em; cursor: pointer;
+    }
+    .langs button[aria-pressed="true"] { background: var(--forest); color: var(--on-forest); }
+    main { flex: 1; display: grid; place-items: center; padding: 12px 16px 40px; }
+    .card {
+      width: 100%; max-width: 460px; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 20px; padding: clamp(28px, 6vw, 44px); box-shadow: var(--shadow); text-align: center;
+    }
+    .icon { width: 64px; height: 64px; margin: 0 auto 22px; display: grid; place-items: center; border-radius: 50%; background: var(--forest-soft); color: var(--forest); }
+    .icon svg { width: 30px; height: 30px; }
+    .icon[data-tone="warn"] { background: var(--terracotta-soft); color: var(--terracotta-ink); }
+    .icon [data-icon] { display: none; }
+    .icon[data-show="mail"] [data-icon="mail"], .icon[data-show="check"] [data-icon="check"], .icon[data-show="alert"] [data-icon="alert"] { display: block; }
+    h1 { margin: 0 0 10px; font: 600 clamp(26px, 5vw, 30px)/1.2 var(--serif); letter-spacing: -.01em; text-wrap: balance; }
+    p { margin: 0; color: var(--muted); text-wrap: pretty; }
+    .actions { display: flex; flex-direction: column; gap: 10px; margin-top: 28px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 50px; padding: 0 24px;
+      border-radius: 12px; border: 1px solid transparent; font: 600 16px/1 var(--sans); text-decoration: none; cursor: pointer;
+      transition: background-color .15s, border-color .15s;
+    }
+    .btn-primary { background: var(--forest); color: var(--on-forest); }
+    .btn-primary:hover { background: var(--forest-hover); }
+    .btn-primary:disabled { opacity: .65; cursor: progress; }
+    .btn-ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+    .btn-ghost:hover { background: var(--sunken); }
+    .btn[hidden] { display: none; }
+    .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+    .spinner[hidden] { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .note { margin-top: 22px; font-size: 14px; color: var(--subtle); }
+    :focus-visible { outline: 2px solid var(--forest); outline-offset: 2px; }
+    footer { padding: 0 16px 24px; text-align: center; font-size: 13px; color: var(--subtle); }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2s; } }
+  </style>
 </head>
 <body>
-  <main>
-    <h1>Подтверждение email</h1>
-    <p id="status" role="status">Нажмите кнопку, чтобы подтвердить регистрацию в Question-To-Quiz.</p>
-    <button id="confirm" type="button" disabled>Подтвердить email</button>
-    <noscript>Включите JavaScript для подтверждения email.</noscript>
+  <div class="glow" aria-hidden="true"><span class="a"></span><span class="b"></span></div>
+  <header>
+    <a class="brand" href="/" aria-label="telebeland">
+      <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" fill="#2F5141"/>
+        <path d="M8 10.5c2.6-.9 5.3-.6 8 1 2.7-1.6 5.4-1.9 8-1v12c-2.6-.9-5.3-.6-8 1-2.7-1.6-5.4-1.9-8-1z" fill="none" stroke="#FFFCF6" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M16 11.5v12" stroke="#FFFCF6" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M19.5 9v6l1.5-1.2 1.5 1.2V9" fill="#D9895F"/>
+      </svg>
+      <b>telebeland</b>
+    </a>
+    <div class="langs" role="group" aria-label="Язык" id="langs">
+      <button type="button" data-lang="az" aria-pressed="false">AZ</button>
+      <button type="button" data-lang="ru" aria-pressed="true">RU</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="card" aria-labelledby="title">
+      <div class="icon" id="icon" data-show="mail" aria-hidden="true">
+        <svg data-icon="mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/></svg>
+        <svg data-icon="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.7 2.7L16.5 9.5"/></svg>
+        <svg data-icon="alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg>
+      </div>
+      <h1 id="title">Подтвердите email</h1>
+      <p id="status" role="status" aria-live="polite">Нажмите кнопку, чтобы завершить регистрацию в telebeland.</p>
+      <div class="actions">
+        <button class="btn btn-primary" id="confirm" type="button" disabled>
+          <span class="spinner" id="spinner" hidden aria-hidden="true"></span>
+          <span id="confirm-label">Подтвердить email</span>
+        </button>
+        <a class="btn btn-primary" id="login" href="/login" hidden>Войти</a>
+        <a class="btn btn-ghost" id="home" href="/" hidden>На главную</a>
+      </div>
+      <p class="note" id="note">Ссылка срабатывает один раз.</p>
+      <noscript><p class="note">Включите JavaScript, чтобы подтвердить email.</p></noscript>
+    </section>
   </main>
+  <footer id="footer">telebeland · Учебное пространство для подготовки к экзаменам</footer>
+
   <script nonce="{{.Nonce}}">
-    let token = new URLSearchParams(window.location.hash.slice(1)).get("token") || "";
-    history.replaceState(null, "", window.location.pathname);
-    const button = document.getElementById("confirm");
-    const status = document.getElementById("status");
-    if (token) {
-      button.disabled = false;
-    } else {
-      status.textContent = "В ссылке нет кода подтверждения. Откройте ссылку из письма.";
-    }
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      status.textContent = "Подтверждаем email…";
-      try {
-        const response = await fetch("/v1/auth/verify-email", {
-          method: "POST",
-          credentials: "omit",
-          headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({token})
-        });
-        if (response.ok) {
-          token = "";
-          status.textContent = "Email подтверждён. Теперь можно войти в Question-To-Quiz.";
-          button.hidden = true;
-        } else if (response.status === 400) {
-          token = "";
-          status.textContent = "Ссылка недействительна, уже использована или истекла. Запросите новое письмо на странице входа.";
-        } else {
-          status.textContent = "Не удалось подтвердить email. Попробуйте ещё раз.";
-          button.disabled = false;
+    (function () {
+      var copy = {
+        ru: {
+          docTitle: "Подтверждение email · telebeland",
+          langs: "Язык",
+          readyTitle: "Подтвердите email",
+          ready: "Нажмите кнопку, чтобы завершить регистрацию в telebeland.",
+          confirm: "Подтвердить email",
+          working: "Подтверждаем…",
+          note: "Ссылка срабатывает один раз.",
+          doneTitle: "Email подтверждён",
+          done: "Готово! Теперь можно войти в telebeland и начать подготовку.",
+          login: "Войти",
+          home: "На главную",
+          invalidTitle: "Ссылка не работает",
+          invalid: "Ссылка недействительна, уже использована или истекла. Запросите новое письмо на странице входа.",
+          missing: "В ссылке нет кода подтверждения. Откройте ссылку из письма целиком.",
+          toLogin: "Перейти ко входу",
+          failedTitle: "Не получилось",
+          failed: "Не удалось подтвердить email. Попробуйте ещё раз.",
+          network: "Нет связи с сервером. Проверьте интернет и попробуйте ещё раз.",
+          retry: "Попробовать ещё раз",
+          footer: "telebeland · Учебное пространство для подготовки к экзаменам"
+        },
+        az: {
+          docTitle: "E-poçtun təsdiqi · telebeland",
+          langs: "Dil",
+          readyTitle: "E-poçtunuzu təsdiqləyin",
+          ready: "telebeland-də qeydiyyatı tamamlamaq üçün düyməyə klikləyin.",
+          confirm: "E-poçtu təsdiqlə",
+          working: "Təsdiqlənir…",
+          note: "Keçid yalnız bir dəfə işləyir.",
+          doneTitle: "E-poçt təsdiqləndi",
+          done: "Hazırdır! İndi telebeland-ə daxil olub hazırlığa başlaya bilərsiniz.",
+          login: "Daxil ol",
+          home: "Ana səhifəyə",
+          invalidTitle: "Keçid işləmir",
+          invalid: "Keçid etibarsızdır, artıq istifadə olunub və ya vaxtı bitib. Giriş səhifəsində yeni məktub istəyin.",
+          missing: "Keçiddə təsdiq kodu yoxdur. Məktubdakı keçidi tam açın.",
+          toLogin: "Giriş səhifəsinə keç",
+          failedTitle: "Alınmadı",
+          failed: "E-poçtu təsdiqləmək alınmadı. Yenidən cəhd edin.",
+          network: "Serverlə əlaqə yoxdur. İnterneti yoxlayıb yenidən cəhd edin.",
+          retry: "Yenidən cəhd et",
+          footer: "telebeland · İmtahanlara hazırlıq üçün tədris məkanı"
         }
-      } catch {
-        status.textContent = "Нет связи с сервером. Попробуйте ещё раз.";
-        button.disabled = false;
+      };
+
+      var params = new URLSearchParams(window.location.hash.slice(1));
+      var token = params.get("token") || "";
+      // Drop the token from the address bar and history right away.
+      history.replaceState(null, "", window.location.pathname);
+
+      function pickLang() {
+        var fromLink = params.get("lang");
+        if (fromLink === "az" || fromLink === "ru") return fromLink;
+        try {
+          var saved = localStorage.getItem("telebeland.lang");
+          if (saved === "az" || saved === "ru") return saved;
+        } catch (e) {}
+        var list = navigator.languages || [navigator.language || ""];
+        for (var i = 0; i < list.length; i++) {
+          var tag = String(list[i]).toLowerCase();
+          if (tag.indexOf("az") === 0) return "az";
+          if (tag.indexOf("ru") === 0) return "ru";
+        }
+        return "ru";
       }
-    });
+
+      var lang = pickLang();
+      var state = token ? "ready" : "missing";
+      var el = function (id) { return document.getElementById(id); };
+      var button = el("confirm");
+
+      function render() {
+        var t = copy[lang];
+        document.documentElement.lang = lang;
+        document.title = t.docTitle;
+        el("langs").setAttribute("aria-label", t.langs);
+        Array.prototype.forEach.call(document.querySelectorAll("[data-lang]"), function (b) {
+          b.setAttribute("aria-pressed", String(b.getAttribute("data-lang") === lang));
+        });
+        el("footer").textContent = t.footer;
+        el("login").textContent = state === "done" ? t.login : t.toLogin;
+        el("home").textContent = t.home;
+
+        var icon = el("icon");
+        var view = {
+          ready: { icon: "mail", title: t.readyTitle, text: t.ready, label: t.confirm },
+          working: { icon: "mail", title: t.readyTitle, text: t.working, label: t.working },
+          done: { icon: "check", title: t.doneTitle, text: t.done },
+          invalid: { icon: "alert", warn: true, title: t.invalidTitle, text: t.invalid },
+          missing: { icon: "alert", warn: true, title: t.invalidTitle, text: t.missing },
+          failed: { icon: "alert", warn: true, title: t.failedTitle, text: t.failed, label: t.retry },
+          network: { icon: "alert", warn: true, title: t.failedTitle, text: t.network, label: t.retry }
+        }[state];
+        icon.setAttribute("data-show", view.icon);
+        if (view.warn) icon.setAttribute("data-tone", "warn"); else icon.removeAttribute("data-tone");
+        el("title").textContent = view.title;
+        el("status").textContent = view.text;
+
+        var canConfirm = state === "ready" || state === "working" || state === "failed" || state === "network";
+        button.hidden = !canConfirm;
+        button.disabled = state === "working";
+        el("spinner").hidden = state !== "working";
+        if (view.label) el("confirm-label").textContent = view.label;
+        el("note").textContent = t.note;
+        el("note").hidden = !canConfirm;
+        el("login").hidden = canConfirm;
+        el("home").hidden = state !== "done";
+      }
+
+      Array.prototype.forEach.call(document.querySelectorAll("[data-lang]"), function (b) {
+        b.addEventListener("click", function () {
+          lang = b.getAttribute("data-lang");
+          try { localStorage.setItem("telebeland.lang", lang); } catch (e) {}
+          render();
+        });
+      });
+
+      button.addEventListener("click", async function () {
+        if (state === "working") return;
+        state = "working";
+        render();
+        try {
+          var response = await fetch("/v1/auth/verify-email", {
+            method: "POST",
+            credentials: "omit",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: token })
+          });
+          if (response.ok) {
+            token = "";
+            state = "done";
+          } else if (response.status === 400) {
+            token = "";
+            state = "invalid";
+          } else {
+            state = "failed";
+          }
+        } catch (e) {
+          state = "network";
+        }
+        render();
+        if (state === "done") el("login").focus();
+      });
+
+      render();
+    })();
   </script>
 </body>
 </html>

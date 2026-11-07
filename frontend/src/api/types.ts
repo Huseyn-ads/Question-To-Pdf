@@ -175,7 +175,17 @@ export interface RawQuizFull extends QuizSummary {
 // ── Attempts ────────────────────────────────────────────────────────────────
 export type AttemptStatus = 'in_progress' | 'completed' | 'expired'
 
-export interface SavedAnswer {
+/**
+ * Answers are final: the first choice locks the question, and the server
+ * reveals right away whether it was correct.
+ */
+export interface AnswerFeedback {
+  is_correct: boolean
+  /** Every correct option of the question; empty when it has no answer key. */
+  correct_option_ids: UUID[]
+}
+
+export interface SavedAnswer extends AnswerFeedback {
   id: UUID
   quiz_question_id: UUID
   quiz_answer_option_id: UUID
@@ -200,7 +210,7 @@ export interface StartAttemptResult {
   created: boolean
 }
 
-export interface SaveAnswerResult {
+export interface SaveAnswerResult extends AnswerFeedback {
   quiz_question_id: UUID
   option_id: UUID
   updated_at: ISODateTime
