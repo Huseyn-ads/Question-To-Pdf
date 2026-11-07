@@ -138,7 +138,7 @@ func TestGoogleLoginCallback(t *testing.T) {
 				}
 				return
 			}
-			if response.Header().Get("Location") != "/v1/auth/me" {
+			if response.Header().Get("Location") != googleSuccessPath {
 				t.Fatal("wrong callback destination")
 			}
 			cookies = response.Result().Cookies()

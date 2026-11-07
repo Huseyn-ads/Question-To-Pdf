@@ -1,0 +1,165 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource-variable/source-serif-4/opsz.css";
+
+/*
+ * Telebeland design tokens.
+ * Contrast (WCAG 2.2) is checked against the surfaces each colour is used on:
+ *   ink #352F29        — 11.6:1 on paper, 12.9:1 on surface
+ *   ink-muted #685E54  — 5.6:1 on paper, 6.2:1 on surface, 5.1:1 on sunken
+ *   ink-subtle #776B5F — 4.6:1 on paper, 5.1:1 on surface (meta text only)
+ *   primary #2F5141    — 7.8:1 on paper; surface text on primary 8.6:1
+ *   danger #A3432A     — 5.5:1 on paper, 5.1:1 on danger-soft
+ *   warning-ink        — 5.3:1 on warning-soft, 6.2:1 on surface
+ *   terracotta-ink #8A4527 — 5.7:1 on terracotta-soft (timer warning, wrong answers)
+ *   control #8E806B    — 3.4:1 on paper / 3.8:1 on surface (UI boundary ≥ 3:1)
+ * Terracotta #B5643F and sage #6E8F76 are decorative accents (illustrations,
+ * markers); text in those hues uses the *-ink variants.
+ */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Source Serif 4 Variable", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --color-paper: #f5f0e7;
+  --color-surface: #fffcf6;
+  --color-sunken: #ede5d7;
+  --color-ink: #352f29;
+  --color-ink-muted: #685e54;
+  --color-ink-subtle: #776b5f;
+  --color-line: #ddd2c1;
+  --color-line-soft: #e9e1d3;
+  --color-control: #8e806b;
+
+  --color-forest: #2f5141;
+  --color-forest-hover: #264436;
+  --color-forest-soft: #e4ece4;
+  --color-forest-tint: #f0f4ee;
+
+  --color-sage: #6e8f76;
+  --color-sage-soft: #e6ece1;
+  --color-sage-ink: #4f6b55;
+
+  --color-terracotta: #b5643f;
+  --color-terracotta-soft: #f6e4d8;
+  --color-terracotta-ink: #8a4527;
+
+  --color-danger: #a3432a;
+  --color-danger-soft: #f8e6dc;
+  --color-warning-ink: #7a5a12;
+  --color-warning-soft: #f5eacb;
+
+  /* shadcn/ui semantic aliases (used by generated primitives) */
+  --color-background: var(--color-paper);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-forest);
+  --color-primary-foreground: var(--color-surface);
+  --color-secondary: var(--color-sage-soft);
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: var(--color-sunken);
+  --color-muted-foreground: var(--color-ink-muted);
+  --color-accent: var(--color-forest-tint);
+  --color-accent-foreground: var(--color-ink);
+  --color-destructive: var(--color-danger);
+  --color-border: var(--color-line);
+  --color-input: var(--color-control);
+  --color-ring: var(--color-forest);
+
+  /* Radii: controls 10px, panels 14px, small chips 6px */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* One soft elevation for floating layers; panels use borders, not shadows */
+  --shadow-float: 0 1px 2px rgb(53 47 41 / 0.06), 0 8px 24px -6px rgb(53 47 41 / 0.14);
+  --shadow-raise: 0 1px 2px rgb(53 47 41 / 0.05);
+
+  /* Type scale (rem at 16px root). Reading text is 17px. */
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1rem;
+  --text-reading: 1.0625rem;
+  --text-reading--line-height: 1.7rem;
+  --text-question: 1.375rem;
+  --text-question--line-height: 2rem;
+
+  --spacing-gutter: 1rem;
+  --spacing-sidebar: 15.5rem;
+  --container-content: 72rem;
+  --container-reading: 46rem;
+
+  --animate-fade-in: fade-in 160ms ease-out;
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    font-feature-settings: "cv11", "ss01";
+    min-height: 100dvh;
+  }
+
+  *,
+  ::after,
+  ::before {
+    border-color: var(--color-line);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* One visible focus style everywhere: 2px forest ring with paper offset. */
+  :focus-visible {
+    outline: 2px solid var(--color-forest);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--color-forest-soft);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility font-display {
+  font-family: var(--font-serif);
+  font-optical-sizing: auto;
+  letter-spacing: -0.01em;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility pb-safe {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
