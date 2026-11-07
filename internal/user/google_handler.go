@@ -25,6 +25,9 @@ const (
 	googleKeysURL    = "https://www.googleapis.com/oauth2/v3/certs"
 	googleStateTTL   = 5 * time.Minute
 	googleCookieName = "qtp_google_oauth"
+	// googleSuccessPath is the same-origin frontend page that finishes sign-in:
+	// it loads /v1/auth/me and /v1/auth/csrf like after a password login.
+	googleSuccessPath = "/auth/complete"
 )
 
 type googleLogin struct {
@@ -157,7 +160,7 @@ func (handler *UserHandler) GoogleCallback(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	handler.setSessionCookie(w, result)
-	http.Redirect(w, r, "/v1/auth/me", http.StatusSeeOther)
+	http.Redirect(w, r, googleSuccessPath, http.StatusSeeOther)
 }
 
 func (handler *UserHandler) allowGoogleLogin(w http.ResponseWriter, r *http.Request) bool {

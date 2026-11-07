@@ -5,3 +5,5 @@
 *.pem
 tmp
 coverage.out
+# The backend image does not use the React app (and its node_modules).
+frontend
